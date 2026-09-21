@@ -9,7 +9,8 @@
  *     ※ 雲端空間必須開啟 CORS，否則清單與「打包下載」會被瀏覽器擋下。
  */
 window.APP_CONFIG = {
-  imagesSource: "images.json",
+//  imagesSource: "images.json",
+  imagesSource: "https://script.google.com/macros/s/AKfycbwAgrPrTJGgbO7tPHx20jg7dRT83xS_rvCbM2QRH4ygZu-NC5CtJraIbxsYW5VQ1r0b/exec",
   longPressMs: 500,        // 長按幾毫秒進入多選模式
   zipPrefix: "photos"      // 打包下載的 zip 檔名前綴
 };
