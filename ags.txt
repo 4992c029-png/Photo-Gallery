@@ -1,0 +1,42 @@
+function doGet() {
+  // ⚠️ 請將下方字串替換為您步驟一取得的 Google Drive 資料夾 ID
+  var FOLDER_ID = "123"; 
+  
+  try {
+    var folder = DriveApp.getFolderById(FOLDER_ID);
+    var files = folder.getFiles();
+    var images = [];
+
+    while (files.hasNext()) {
+      var file = files.next();
+      var mime = file.getMimeType();
+      
+      // 只過濾圖片格式 (jpg, png, webp, gif 等)
+      if (mime.indexOf("image/") === 0) {
+        var id = file.getId();
+        var name = file.getName();
+        
+        // 產生 Google 官方的高效能直連圖片網址
+        var directUrl = "https://lh3.googleusercontent.com/d/" + id;
+        
+        images.push({
+          name: name,
+          thumb: directUrl + "=w600", // 縮圖：寬度限制為 600px，提升網格頁面載入速度
+          full: directUrl              // 原圖：燈箱預覽與打包下載使用
+        });
+      }
+    }
+
+    var result = JSON.stringify({ images: images });
+    
+    // 回傳 JSON 格式並開啟跨域 (CORS) 支援
+    return ContentService.createTextOutput(result)
+      .setMimeType(ContentService.MimeType.JSON);
+      
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ 
+      error: error.toString(), 
+      images: [] 
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
