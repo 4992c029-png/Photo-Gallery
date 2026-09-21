@@ -1,0 +1,43 @@
+function doGet() {
+  var FOLDER_ID = "123"; 
+  
+  try {
+    var folder = DriveApp.getFolderById(FOLDER_ID);
+    var files = folder.getFiles();
+    var images = [];
+
+    while (files.hasNext()) {
+      var file = files.next();
+      var mime = file.getMimeType();
+      
+      if (mime.indexOf("image/") === 0) {
+        // 💡 自動為新照片補上「知道連結者皆可檢視」的權限
+        try {
+          file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        } catch (e) {
+          // 若無修改權限則自動略過，不影響讀取
+        }
+
+        var id = file.getId();
+        var name = file.getName();
+        var directUrl = "https://lh3.googleusercontent.com/d/" + id;
+        
+        images.push({
+          name: name,
+          thumb: directUrl + "=w600",
+          full: directUrl
+        });
+      }
+    }
+
+    var result = JSON.stringify({ images: images });
+    return ContentService.createTextOutput(result)
+      .setMimeType(ContentService.MimeType.JSON);
+      
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ 
+      error: error.toString(), 
+      images: [] 
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
