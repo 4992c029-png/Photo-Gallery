@@ -1,8 +1,124 @@
-
-const CONFIG = {
-  // 將原本的 "images.json" 替換為你的 Google Apps Script Web App 網址
-  imagesSource: "https://script.google.com/macros/s/AKfycbwAgrPrTJGgbO7tPHx20jg7dRT83xS_rvCbM2QRH4ygZu-NC5CtJraIbxsYW5VQ1r0b/exec",
-  
-  // 長按觸發多選的時間（毫秒）
-  longPressMs: 500
-};
+{
+  "images": [
+    {
+      "name": "photo-01.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-01/400/400",
+      "full": "https://picsum.photos/seed/gallery-01/1600/1067"
+    },
+    {
+      "name": "photo-02.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-02/400/400",
+      "full": "https://picsum.photos/seed/gallery-02/1200/1600"
+    },
+    {
+      "name": "photo-03.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-03/400/400",
+      "full": "https://picsum.photos/seed/gallery-03/1600/1067"
+    },
+    {
+      "name": "photo-04.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-04/400/400",
+      "full": "https://picsum.photos/seed/gallery-04/1600/900"
+    },
+    {
+      "name": "photo-05.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-05/400/400",
+      "full": "https://picsum.photos/seed/gallery-05/1200/1200"
+    },
+    {
+      "name": "photo-06.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-06/400/400",
+      "full": "https://picsum.photos/seed/gallery-06/1067/1600"
+    },
+    {
+      "name": "photo-07.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-07/400/400",
+      "full": "https://picsum.photos/seed/gallery-07/1600/1067"
+    },
+    {
+      "name": "photo-08.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-08/400/400",
+      "full": "https://picsum.photos/seed/gallery-08/1200/1600"
+    },
+    {
+      "name": "photo-09.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-09/400/400",
+      "full": "https://picsum.photos/seed/gallery-09/1600/1067"
+    },
+    {
+      "name": "photo-10.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-10/400/400",
+      "full": "https://picsum.photos/seed/gallery-10/1600/900"
+    },
+    {
+      "name": "photo-11.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-11/400/400",
+      "full": "https://picsum.photos/seed/gallery-11/1200/1200"
+    },
+    {
+      "name": "photo-12.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-12/400/400",
+      "full": "https://picsum.photos/seed/gallery-12/1067/1600"
+    },
+    {
+      "name": "photo-13.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-13/400/400",
+      "full": "https://picsum.photos/seed/gallery-13/1600/1067"
+    },
+    {
+      "name": "photo-14.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-14/400/400",
+      "full": "https://picsum.photos/seed/gallery-14/1200/1600"
+    },
+    {
+      "name": "photo-15.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-15/400/400",
+      "full": "https://picsum.photos/seed/gallery-15/1600/1067"
+    },
+    {
+      "name": "photo-16.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-16/400/400",
+      "full": "https://picsum.photos/seed/gallery-16/1600/900"
+    },
+    {
+      "name": "photo-17.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-17/400/400",
+      "full": "https://picsum.photos/seed/gallery-17/1200/1200"
+    },
+    {
+      "name": "photo-18.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-18/400/400",
+      "full": "https://picsum.photos/seed/gallery-18/1067/1600"
+    },
+    {
+      "name": "photo-19.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-19/400/400",
+      "full": "https://picsum.photos/seed/gallery-19/1600/1067"
+    },
+    {
+      "name": "photo-20.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-20/400/400",
+      "full": "https://picsum.photos/seed/gallery-20/1200/1600"
+    },
+    {
+      "name": "photo-21.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-21/400/400",
+      "full": "https://picsum.photos/seed/gallery-21/1600/1067"
+    },
+    {
+      "name": "photo-22.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-22/400/400",
+      "full": "https://picsum.photos/seed/gallery-22/1600/900"
+    },
+    {
+      "name": "photo-23.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-23/400/400",
+      "full": "https://picsum.photos/seed/gallery-23/1200/1200"
+    },
+    {
+      "name": "photo-24.jpg",
+      "thumb": "https://picsum.photos/seed/gallery-24/400/400",
+      "full": "https://picsum.photos/seed/gallery-24/1067/1600"
+    }
+  ]
+}
