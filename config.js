@@ -10,7 +10,7 @@
  */
 window.APP_CONFIG = {
 //  imagesSource: "images.json",
-  imagesSource: "https://script.google.com/macros/s/AKfycbwAgrPrTJGgbO7tPHx20jg7dRT83xS_rvCbM2QRH4ygZu-NC5CtJraIbxsYW5VQ1r0b/exec",
+  imagesSource: "https://script.google.com/macros/s/AKfycbwIfZz5UdHOuAoxgLD5jftaQHJbv-9hOf3cGyWjxRy0_ue1tfy3zJZrKJJ7OKWbUfZTfA/exec",
   longPressMs: 500,        // 長按幾毫秒進入多選模式
   zipPrefix: "photos"      // 打包下載的 zip 檔名前綴
 };
