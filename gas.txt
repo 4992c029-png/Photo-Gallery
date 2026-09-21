@@ -1,6 +1,14 @@
 function doGet() {
   var FOLDER_ID = "123"; 
+  var cache = CacheService.getScriptCache();
   
+  // 💡 1. 優先讀取整份 JSON 快取（若有快取，0.1 秒內直接回傳）
+  var cachedResponse = cache.get("gallery_json_data");
+  if (cachedResponse) {
+    return ContentService.createTextOutput(cachedResponse)
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   try {
     var folder = DriveApp.getFolderById(FOLDER_ID);
     var files = folder.getFiles();
@@ -11,14 +19,19 @@ function doGet() {
       var mime = file.getMimeType();
       
       if (mime.indexOf("image/") === 0) {
-        // 💡 自動為新照片補上「知道連結者皆可檢視」的權限
-        try {
-          file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-        } catch (e) {
-          // 若無修改權限則自動略過，不影響讀取
+        var id = file.getId();
+        var cacheKey = "perm_" + id;
+
+        // 💡 2. 自動開啟新圖片權限（背景紀錄 6 小時）
+        if (!cache.get(cacheKey)) {
+          try {
+            file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+            cache.put(cacheKey, "1", 21600);
+          } catch (e) {
+            cache.put(cacheKey, "1", 21600);
+          }
         }
 
-        var id = file.getId();
         var name = file.getName();
         var directUrl = "https://lh3.googleusercontent.com/d/" + id;
         
@@ -31,6 +44,11 @@ function doGet() {
     }
 
     var result = JSON.stringify({ images: images });
+
+    // 💡 3. 將整份 API 結果寫入快取 120 秒（2 分鐘）
+    // 這可確保 99% 的讀取都能在 0.2 秒內完成
+    cache.put("gallery_json_data", result, 120);
+
     return ContentService.createTextOutput(result)
       .setMimeType(ContentService.MimeType.JSON);
       
