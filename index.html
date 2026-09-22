@@ -29,6 +29,33 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Noto+Serif+TC:wght@500;600&display=swap" rel="stylesheet">
 
+<!-- 上傳照片 Modal 彈窗 -->
+<div id="uploadModal" class="modal-overlay" style="display:none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>所有人上傳的照片 (下拉可更新)</h3>
+      <button onclick="closeUploadModal()" class="close-btn">&times;</button>
+    </div>
+    
+    <!-- 下拉刷新指示器 -->
+    <div id="pullRefreshIndicator" class="pull-refresh-indicator">
+      <span class="refresh-icon">↓</span> 下拉更新預覽...
+    </div>
+
+    <!-- 上傳功能區 -->
+    <div class="upload-action-bar">
+      <input type="file" id="imageInput" accept="image/*" style="display:none;" onchange="handleFileSelect(event)">
+      <button onclick="document.getElementById('imageInput').click()" class="btn-primary">📷 選擇照片上傳</button>
+      <span id="uploadStatusText"></span>
+    </div>
+
+    <!-- 上傳照片預覽網格區 -->
+    <div id="uploadPreviewGrid" class="upload-preview-grid">
+      <!-- 動態載入照片 -->
+    </div>
+  </div>
+</div>
+  
 <style>
 /* ========== Design tokens ========== */
 :root{
