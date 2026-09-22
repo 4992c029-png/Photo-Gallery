@@ -1,5 +1,5 @@
 /* Service Worker：讓網頁可安裝成 PWA，並在離線時仍能開啟介面 */
-const CACHE = 'gallery-shell-v1';
+const CACHE = 'gallery-shell-v3';
 const SHELL = [
   './',
   'index.html',
@@ -7,7 +7,13 @@ const SHELL = [
   'manifest.json',
   'icons/icon-192.png',
   'icons/icon-512.png',
-  'icons/apple-touch-icon.png'
+  'icons/apple-touch-icon.png',
+  'assets/hero.jpg',
+  'assets/monogram.png',
+  'assets/leaf-tl.png',
+  'assets/leaf-bl.png',
+  'assets/leaf-br.png',
+  'assets/sprig.png'
 ];
 const CDN_HOSTS = ['cdnjs.cloudflare.com'];
 

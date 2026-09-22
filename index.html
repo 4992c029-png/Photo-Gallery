@@ -9,6 +9,11 @@
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#111214">
 
+<!-- 提早建立連線：Google Apps Script（清單）與 googleusercontent（圖片） -->
+<link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<link rel="preconnect" href="https://lh3.googleusercontent.com">
+
 <!-- PWA：從主畫面開啟時不會顯示網址列 -->
 <link rel="manifest" href="manifest.json">
 <meta name="mobile-web-app-capable" content="yes">
@@ -16,9 +21,13 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Gallery">
 <meta name="format-detection" content="telephone=no">
-<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+<!-- 標題與內文字型 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Noto+Serif+TC:wght@500;600&display=swap" rel="stylesheet">
 
 <style>
 /* ========== Design tokens ========== */
@@ -29,10 +38,14 @@
   --line:rgba(255,255,255,.09);
   --text:#f0ede6;        /* paper white */
   --muted:#8f9399;
-  --accent:#f0b35a;      /* safelight amber */
-  --accent-ink:#1c1206;
+  --accent:#a6b28c;      /* sage green, matches the invitation art */
+  --accent-ink:#1a1f13;
+  --btn:#69715a;         /* the invitation's olive button colour */
+  --btn-ink:#faf8f2;
+  --cream:#efe9dd;
+  --ink:#2c2a23;
 
-  --font-display:"Iowan Old Style","Palatino Linotype","Book Antiqua","Noto Serif TC","Songti TC","Source Han Serif TC","PMingLiU",Georgia,serif;
+  --font-display:"Cormorant Garamond","Noto Serif TC","Iowan Old Style","Palatino Linotype","Songti TC","Source Han Serif TC","PMingLiU",Georgia,serif;
   --font-ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI","Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
 
   --safe-t:env(safe-area-inset-top,0px);
@@ -77,51 +90,71 @@ button{font:inherit;color:inherit;touch-action:manipulation}
 @media (hover:hover){.icon-btn:hover{background:rgba(255,255,255,.07)}}
 .text-btn{border:0;border-radius:10px;padding:9px 14px;background:rgba(240,179,90,.14);color:var(--accent);font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap}
 
-/* ========== 1. Language page ========== */
-.lang-page{position:relative}
-.lang-brand{
-  position:absolute;z-index:2;top:calc(18px + var(--safe-t));left:max(24px,var(--safe-l));
-  display:flex;align-items:center;gap:10px;
-  font-size:14px;font-weight:600;letter-spacing:.02em;color:var(--muted);pointer-events:none;
-}
-.lang-brand img{width:26px;height:26px;border-radius:7px}
-.lang-split{flex:1;display:grid;grid-template-rows:1fr 1fr}
-.lang-panel{
-  position:relative;display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-start;gap:10px;
-  padding:28px max(28px,var(--safe-r)) calc(30px + var(--safe-b)) max(28px,var(--safe-l));
-  border:0;background:var(--bg);color:var(--text);text-align:left;cursor:pointer;overflow:hidden;
-  transition:background .25s ease;
-}
-.lang-panel + .lang-panel{background:var(--surface);border-top:1px solid var(--line)}
-.lang-word{font-family:var(--font-display);font-weight:600;font-size:clamp(60px,19vw,132px);line-height:1;letter-spacing:-.01em;transition:color .25s ease,transform .25s ease}
-.lang-note{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--muted)}
-.lang-panel.current .lang-note::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent)}
-@media (hover:hover){.lang-panel:hover{background:#1e2024}.lang-panel:hover .lang-word{color:var(--accent)}}
-.lang-panel:focus-visible .lang-word{color:var(--accent)}
-.lang-panel:active .lang-word{transform:scale(.98)}
-.lang-panel:focus-visible{outline-offset:-4px}
-@media (min-width:820px){
-  .lang-split{grid-template-rows:none;grid-template-columns:1fr 1fr}
-  .lang-panel + .lang-panel{border-top:0;border-left:1px solid var(--line)}
-  .lang-word{font-size:clamp(64px,9vw,148px)}
+/* ========== 首頁：喜帖風格 ========== */
+body{background:#3a4032}   /* 桌面版卡片外的環境色，取自照片的暗綠調 */
+.home-page{padding:0}
+.home-page .home-scroll{width:100%;max-width:100%;margin:0 auto;background:var(--cream);min-height:100vh;min-height:100dvh;box-shadow:none}
+@media (min-width:640px){
+  body:has(.home-page:not([hidden])){padding:32px 16px}
+  .home-page{min-height:0;display:block}
+  .home-page .home-scroll{max-width:460px;min-height:0;border-radius:22px;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.45),0 2px 10px rgba(0,0,0,.3)}
 }
 
-/* ========== 2. Menu page ========== */
-.menu{flex:1;display:flex;flex-direction:column}
-.menu-row{
-  flex:1;min-height:180px;display:flex;align-items:flex-end;justify-content:space-between;gap:18px;
-  padding:28px max(24px,var(--safe-r)) 30px max(24px,var(--safe-l));
-  border:0;border-bottom:1px solid var(--line);background:transparent;text-align:left;cursor:pointer;
-  transition:background .2s ease;
+.home-hero{position:relative;width:100%;aspect-ratio:622/723;overflow:hidden;background:#c9c3b4}
+.hero-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;user-select:none;-webkit-user-drag:none}
+.hero-shade{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,10,8,.30) 0%,rgba(10,10,8,0) 20%,rgba(10,10,8,0) 62%,rgba(10,10,8,.62) 100%)}
+
+.lang-switch{position:absolute;z-index:3;top:calc(12px + var(--safe-t));right:max(12px,var(--safe-r))}
+.lang-btn{
+  display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px 0 11px;border-radius:999px;
+  border:1px solid rgba(255,255,255,.55);background:rgba(20,22,16,.34);-webkit-backdrop-filter:blur(12px) saturate(1.3);backdrop-filter:blur(12px) saturate(1.3);
+  color:#fff;font-size:13px;font-weight:600;letter-spacing:.02em;text-shadow:0 1px 2px rgba(0,0,0,.35);cursor:pointer;
 }
-@media (hover:hover){.menu-row:hover{background:rgba(255,255,255,.035)}}
-.menu-row:focus-visible{outline-offset:-4px}
-.menu-title{display:block;font-family:var(--font-display);font-weight:600;font-size:clamp(36px,10vw,64px);line-height:1.1}
-.menu-desc{display:block;margin-top:8px;font-size:15px;color:var(--muted);max-width:32ch}
-.menu-row .ic{width:34px;height:34px;color:var(--accent);margin-bottom:6px}
-.menu-row.soon .menu-title{color:#a9aaa6}
-.menu-row.soon .ic{color:var(--muted)}
-.install-hint{margin:0;padding:18px max(24px,var(--safe-r)) calc(22px + var(--safe-b)) max(24px,var(--safe-l));font-size:13.5px;color:var(--muted);max-width:60ch}
+.lang-btn .ic{width:15px;height:15px}
+.lang-btn .chev{width:13px;height:13px;transition:transform .18s ease}
+.lang-switch.open .lang-btn .chev{transform:rotate(180deg)}
+.lang-switch.open .lang-btn{background:rgba(20,22,16,.55)}
+.lang-menu{
+  position:absolute;top:calc(100% + 8px);right:0;z-index:3;min-width:132px;margin:0;padding:6px;list-style:none;
+  border-radius:14px;border:1px solid rgba(255,255,255,.16);background:rgba(28,30,23,.86);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
+  box-shadow:0 14px 30px rgba(0,0,0,.35);
+}
+.lang-menu li{padding:9px 12px;border-radius:9px;color:#f2efe6;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lang-menu li::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);opacity:0}
+.lang-menu li[aria-selected="true"]::after{opacity:1}
+@media (hover:hover){.lang-menu li:hover{background:rgba(255,255,255,.1)}}
+
+.hero-mark{position:absolute;z-index:2;left:0;right:0;top:6%;display:flex;flex-direction:column;align-items:center;gap:2px}
+.hero-mark .monogram{width:clamp(96px,26vw,150px);height:auto;filter:drop-shadow(0 1px 3px rgba(0,0,0,.25))}
+.mark-caption{margin:0;color:#fff;font-size:clamp(11px,2.6vw,13px);font-weight:600;letter-spacing:.28em;text-shadow:0 1px 3px rgba(0,0,0,.3)}
+
+.hero-copy{position:absolute;z-index:2;left:0;right:0;bottom:6.5%;padding:0 20px;text-align:center;color:#fff}
+.couple-names{margin:0;font-family:var(--font-display);font-weight:600;font-size:clamp(26px,7.6vw,38px);line-height:1.15;text-shadow:0 2px 10px rgba(0,0,0,.35)}
+.hero-tagline{margin:8px 0 0;display:flex;align-items:center;justify-content:center;gap:14px;font-family:var(--font-display);font-style:italic;font-size:clamp(14px,4vw,18px);color:#f2efe6;text-shadow:0 1px 6px rgba(0,0,0,.35)}
+.hero-tagline .rule{width:30px;height:1px;background:rgba(255,255,255,.75)}
+
+.home-paper{position:relative;background:var(--cream);padding:30px max(22px,var(--safe-r)) calc(22px + var(--safe-b)) max(22px,var(--safe-l))}
+.home-paper .leaf{position:absolute;pointer-events:none;user-select:none;-webkit-user-drag:none}
+.leaf-tl{top:0;left:0;width:30%;max-width:168px}
+.leaf-bl{bottom:0;left:0;width:30%;max-width:168px}
+.leaf-br{bottom:0;right:0;width:32%;max-width:190px}
+.paper-inner{position:relative;z-index:1}
+.paper-buttons{display:flex;flex-direction:column;gap:14px;margin:8px 0 26px}
+.paper-btn{
+  display:flex;align-items:center;gap:12px;width:100%;min-height:58px;padding:0 20px;border:0;border-radius:999px;
+  background:var(--btn);color:var(--btn-ink);cursor:pointer;box-shadow:0 8px 18px rgba(60,66,48,.22);
+  transition:transform .15s ease,box-shadow .15s ease,filter .15s ease;
+}
+.paper-btn:active{transform:scale(.98)}
+@media (hover:hover){.paper-btn:hover{filter:brightness(1.07)}}
+.paper-btn-icon{display:grid;place-items:center;flex:none}
+.paper-btn-icon .ic{width:21px;height:21px}
+.paper-btn-label{flex:1;text-align:left;font-family:var(--font-display);font-weight:600;font-size:17px;letter-spacing:.01em}
+.paper-btn-arrow{width:16px;height:16px;flex:none;opacity:.85}
+.paper-divider{display:flex;align-items:center;justify-content:center;gap:14px;margin:0 0 14px}
+.paper-rule{width:64px;height:1px;background:#c9c2ab}
+.sprig{width:30px;height:auto}
+.install-hint{margin:0;text-align:center;font-size:12.5px;line-height:1.6;color:#8b8a76}
 
 /* ========== 3. Gallery page ========== */
 .g-hint{margin:0;padding:12px max(14px,var(--safe-r)) 2px max(14px,var(--safe-l));font-size:13.5px;color:var(--muted)}
@@ -168,6 +201,10 @@ button{font:inherit;color:inherit;touch-action:manipulation}
 .state{display:grid;justify-items:center;gap:14px;padding:90px 28px;text-align:center;color:var(--muted)}
 .state p{margin:0;max-width:30ch}
 .spinner{width:28px;height:28px;border-radius:50%;border:3px solid rgba(255,255,255,.14);border-top-color:var(--accent);animation:spin .8s linear infinite}
+
+.skeleton{padding-top:12px}
+.skeleton .tile{pointer-events:none}
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
 /* Bottom download bar */
 .selbar{
@@ -242,48 +279,70 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-4.5-4.5L8 20"/></symbol>
   <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M11 3l1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.7 9.5h16.6M3.7 14.5h16.6M12 3.5c2.4 2.4 3.7 5.3 3.7 8.5s-1.3 6.1-3.7 8.5c-2.4-2.4-3.7-5.3-3.7-8.5S9.6 5.9 12 3.5z"/></symbol>
+  <symbol id="i-chevdown" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-cloud-up" viewBox="0 0 24 24"><path d="M7.5 18a4.5 4.5 0 0 1-.6-8.96 5.5 5.5 0 0 1 10.7-1.7A4.25 4.25 0 0 1 17 18H7.5z"/><path d="M12 15.2V9.8M9.3 12.4L12 9.7l2.7 2.7"/></symbol>
 </svg>
 
 <noscript><p style="padding:24px">This page needs JavaScript. 請開啟 JavaScript。</p></noscript>
 
-<!-- ============ 1. 語言選擇 ============ -->
-<section class="page lang-page" data-page="lang" aria-label="Language 語言">
-  <div class="lang-brand"><img src="icons/icon.svg" alt="" width="26" height="26"><span>Gallery 相簿</span></div>
-  <div class="lang-split">
-    <button class="lang-panel" data-lang="zh" lang="zh-Hant">
-      <span class="lang-word">中文</span>
-      <span class="lang-note">以繁體中文瀏覽</span>
-    </button>
-    <button class="lang-panel" data-lang="en" lang="en">
-      <span class="lang-word">English</span>
-      <span class="lang-note">Browse in English</span>
-    </button>
-  </div>
-</section>
+<!-- ============ 首頁：喜帖風格（照片 + 卡紙按鈕區） ============ -->
+<section class="page home-page" data-page="home" aria-label="Home 首頁">
+  <div class="home-scroll">
+    <div class="home-hero">
+      <img class="hero-photo" src="assets/hero.jpg" alt="" draggable="false">
+      <div class="hero-shade" aria-hidden="true"></div>
 
-<!-- ============ 2. 功能選單 ============ -->
-<section class="page" data-page="menu" hidden>
-  <header class="topbar">
-    <button class="icon-btn" id="m-back" data-i18n-aria="back"><svg class="ic"><use href="#i-back"/></svg></button>
-    <div class="topbar-title"><h1 data-i18n="menuTitle"></h1></div>
-  </header>
-  <main class="menu">
-    <button class="menu-row" id="btn-gallery">
-      <span>
-        <span class="menu-title" data-i18n="btnGallery"></span>
-        <span class="menu-desc" data-i18n="btnGalleryDesc"></span>
-      </span>
-      <svg class="ic"><use href="#i-image"/></svg>
-    </button>
-    <button class="menu-row soon" id="btn-soon">
-      <span>
-        <span class="menu-title" data-i18n="btnSoon"></span>
-        <span class="menu-desc" data-i18n="btnSoonDesc"></span>
-      </span>
-      <svg class="ic"><use href="#i-sparkle"/></svg>
-    </button>
-  </main>
-  <p class="install-hint" id="install-hint" data-i18n="installHint"></p>
+      <div class="lang-switch">
+        <button class="lang-btn" id="lang-toggle" aria-haspopup="listbox" aria-expanded="false" aria-controls="lang-menu">
+          <svg class="ic"><use href="#i-globe"/></svg>
+          <span id="lang-current">中文</span>
+          <svg class="ic chev"><use href="#i-chevdown"/></svg>
+        </button>
+        <ul class="lang-menu" id="lang-menu" role="listbox" hidden>
+          <li role="option" data-lang="zh" lang="zh-Hant">中文</li>
+          <li role="option" data-lang="en" lang="en">English</li>
+        </ul>
+      </div>
+
+      <div class="hero-mark" aria-hidden="true">
+        <img src="assets/monogram.png" alt="" class="monogram">
+        <p class="mark-caption">YK &amp; C</p>
+      </div>
+      <div class="hero-copy">
+        <h1 class="couple-names">Yuan Kuan &amp; Cristine</h1>
+        <p class="hero-tagline"><span class="rule"></span><span data-i18n="heroTagline"></span><span class="rule"></span></p>
+      </div>
+    </div>
+
+    <div class="home-paper">
+      <img class="leaf leaf-tl" src="assets/leaf-tl.png" alt="" aria-hidden="true">
+      <img class="leaf leaf-bl" src="assets/leaf-bl.png" alt="" aria-hidden="true">
+      <img class="leaf leaf-br" src="assets/leaf-br.png" alt="" aria-hidden="true">
+
+      <div class="paper-inner">
+        <div class="paper-buttons">
+          <button class="paper-btn" id="btn-gallery">
+            <span class="paper-btn-icon"><svg class="ic"><use href="#i-image"/></svg></span>
+            <span class="paper-btn-label" data-i18n="btnGallery"></span>
+            <svg class="ic paper-btn-arrow"><use href="#i-next"/></svg>
+          </button>
+          <button class="paper-btn" id="btn-soon">
+            <span class="paper-btn-icon"><svg class="ic"><use href="#i-cloud-up"/></svg></span>
+            <span class="paper-btn-label" data-i18n="btnSoon"></span>
+            <svg class="ic paper-btn-arrow"><use href="#i-next"/></svg>
+          </button>
+        </div>
+
+        <div class="paper-divider" aria-hidden="true">
+          <span class="paper-rule"></span>
+          <img src="assets/sprig.png" alt="" class="sprig">
+          <span class="paper-rule"></span>
+        </div>
+        <p class="install-hint" id="install-hint" data-i18n="installHint"></p>
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- ============ 3. 圖片預覽 ============ -->
@@ -296,11 +355,12 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
 
   <p class="g-hint" id="g-hint" data-i18n="hintLongPress" hidden></p>
 
-  <div class="state" id="g-loading"><div class="spinner"></div><p data-i18n="loading"></p></div>
+  <div id="g-loading" role="status"><div class="grid skeleton" id="g-skel" aria-hidden="true"></div><span class="sr-only" data-i18n="loading"></span></div>
   <div class="state" id="g-error" hidden><p data-i18n="loadFailed"></p><button class="btn ghost" id="g-retry" data-i18n="retry"></button></div>
   <div class="state" id="g-empty" hidden><p data-i18n="empty"></p></div>
 
   <main class="grid" id="grid" hidden></main>
+  <div id="g-sentinel" style="height:1px" hidden></div>
 </section>
 
 <!-- 底部下載欄 -->
@@ -361,10 +421,15 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
   /* ================= 基本工具 ================= */
   const $  = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-  const CFG = Object.assign(
-    { imagesSource: 'images.json', longPressMs: 500, zipPrefix: 'photos' },
-    window.APP_CONFIG || {}
-  );
+  const CFG = Object.assign({
+    imagesSource: 'images.json',
+    longPressMs: 500,
+    zipPrefix: 'photos',
+    googleBase: 'https://lh3.googleusercontent.com/d/',
+    downloadPx: 0,               // 0 = 原始大小；也可填 2048 之類，縮小 zip 體積
+    chunkSize: 60,               // 相簿每批渲染幾張
+    fetchTimeoutMs: 30000
+  }, window.APP_CONFIG || {});
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} }
@@ -377,14 +442,12 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
   /* ================= 多國語系 ================= */
   const I18N = {
     zh: {
-      docTitle: '相簿 Gallery',
-      menuTitle: '選擇功能',
-      btnGallery: '圖片預覽',
-      btnGalleryDesc: '瀏覽相片，並下載你想要的。',
-      btnSoon: '敬請期待',
-      btnSoonDesc: '新功能準備中。',
-      soonTitle: '功能開發中',
-      soonMsg: '這個功能還在準備，之後會開放。',
+      docTitle: 'Yuan Kuan & Cristine · 婚禮相簿',
+      heroTagline: '我們的婚禮',
+      btnGallery: '相片集',
+      btnSoon: '上傳照片',
+      soonTitle: '上傳交由雲端管理',
+      soonMsg: '為保護相片安全，新增或刪除照片僅能透過雲端空間後台操作。這裡提供瀏覽與下載，如需加入照片，請聯絡新人。',
       ok: '知道了',
       back: '返回',
       galleryTitle: '圖片預覽',
@@ -415,14 +478,12 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
       installHint: '想隱藏網址列？在瀏覽器選單選「加入主畫面」，之後從主畫面開啟即可全螢幕瀏覽。'
     },
     en: {
-      docTitle: 'Gallery',
-      menuTitle: 'Choose a feature',
+      docTitle: 'Yuan Kuan & Cristine · Wedding Gallery',
+      heroTagline: 'Our Wedding Day',
       btnGallery: 'Photo Gallery',
-      btnGalleryDesc: 'Browse photos and download the ones you like.',
-      btnSoon: 'Coming Soon',
-      btnSoonDesc: 'New features are on the way.',
-      soonTitle: 'Coming soon',
-      soonMsg: 'This feature is still in the works. Check back later.',
+      btnSoon: 'Upload Photo',
+      soonTitle: 'Uploads are managed in the cloud',
+      soonMsg: 'To keep photos safe, adding or removing them is only done through the couple\u2019s cloud storage. This page is for browsing and downloading — please contact the couple to add photos.',
       ok: 'Got it',
       back: 'Back',
       galleryTitle: 'Photo Gallery',
@@ -460,7 +521,9 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     lang: store.get('gallery.lang'),
     images: [],
     loaded: false,
-    loading: false,
+    sig: '',
+    gridDirty: false,
+    pending: null,
     selectMode: false,
     selected: new Set()
   };
@@ -485,7 +548,8 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     document.title = t('docTitle');
     $$('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
     $$('[data-i18n-aria]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
-    $$('.lang-panel').forEach((b) => b.classList.toggle('current', b.dataset.lang === state.lang));
+    $('#lang-current').textContent = (state.lang || fallbackLang) === 'zh' ? '中文' : 'English';
+    $$('#lang-menu [data-lang]').forEach((li) => li.setAttribute('aria-selected', String(li.dataset.lang === (state.lang || fallbackLang))));
     renderGalleryHeader();
     renderSelbar();
     updateLightboxUI();
@@ -500,12 +564,12 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
   const pages = $$('.page');
   function parseRoute() {
     const h = location.hash.replace(/^#\/?/, '');
-    return h === 'menu' || h === 'gallery' ? h : 'lang';
+    return h === 'gallery' ? h : 'home';
   }
   function go(r) { location.hash = '#/' + r; }
   function render() {
-    let r = parseRoute();
-    if (r !== 'lang' && !state.lang) { r = 'lang'; history.replaceState(null, '', '#/lang'); }
+    const r = parseRoute();
+    closeLangMenu();
     hideLightboxNow();
     if (r !== 'gallery') exitSelectMode();
     pages.forEach((p) => { p.hidden = p.dataset.page !== r; });
@@ -546,80 +610,188 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
   }
   const hideBusy = () => { $('#busy').hidden = true; };
 
-  /* ================= 載入圖片清單（唯讀） ================= */
+  /* ================= 資料層：相片清單（快取、預先載入、背景更新） ================= */
+  const DATA_KEY = 'gallery.data.v2';
+  const G_RE = /^https:\/\/lh3\.googleusercontent\.com\/d\/([\w-]+)/;
+  const data = { fetchedAt: 0 };
+  let refreshing = null;
+
+  const roundUp = (v, step) => Math.ceil(v / step) * step;
+  const dpr = (cap) => Math.min(window.devicePixelRatio || 1, cap);
+  const gBase = (id) => CFG.googleBase + id;
+  const previewPx = () => Math.min(2400, roundUp(Math.max(screen.width, screen.height) * dpr(2), 100));
+  function thumbPx() {                       // 依欄數與螢幕密度，只要「剛好夠用」的縮圖尺寸
+    const w = window.innerWidth;
+    const cols = w >= 1500 ? 6 : w >= 1200 ? 5 : w >= 900 ? 4 : w >= 520 ? 3 : 2;
+    const css = (w - 16 - (cols - 1) * 6) / cols;
+    return Math.min(480, Math.max(160, roundUp(css * dpr(2), 40)));
+  }
+  let curThumbPx = 400;
+  const urlThumb = (it, px) => (it.id ? gBase(it.id) + '=s' + px + '-c' : (it.thumb || it.full));
+  const urlPreview = (it) => (it.id ? gBase(it.id) + '=s' + previewPx() : (it.full || it.thumb));
+  const urlDownload = (it) => (it.id ? gBase(it.id) + '=' + (CFG.downloadPx ? 's' + CFG.downloadPx : 's0') : (it.download || it.full));
+
   function basename(u) {
     try { return decodeURIComponent(new URL(u, location.href).pathname.split('/').pop()) || 'image'; }
     catch (_) { return 'image'; }
   }
+  /* 同時支援新格式 {id,name} 與舊格式 {name,thumb,full}（自動辨識 Google 圖片並改用最佳尺寸） */
   function normalize(item) {
-    if (typeof item === 'string') return { full: item, thumb: item, name: basename(item) };
+    if (typeof item === 'string') item = { full: item };
     if (!item || typeof item !== 'object') return null;
-    const full = item.full || item.url || item.src;
-    if (!full) return null;
-    return { full, thumb: item.thumb || item.thumbnail || full, name: item.name || basename(full) };
+    const full = item.full || item.url || item.src || null;
+    const thumb = item.thumb || item.thumbnail || null;
+    let id = item.id || null;
+    if (!id) { const m = (full && G_RE.exec(full)) || (thumb && G_RE.exec(thumb)); if (m) id = m[1]; }
+    if (!id && !full) return null;
+    return { id, name: item.name || (full ? basename(full) : 'photo-' + id.slice(0, 8) + '.jpg'), thumb, full, download: item.download || null };
   }
+  function parseServer(raw) {
+    const list = Array.isArray(raw) ? raw : ((raw && raw.images) || []);
+    if (raw && raw.error && !list.length) throw new Error(String(raw.error));
+    return { images: list.map(normalize).filter(Boolean) };
+  }
+  const signature = (imgs) => imgs.map((i) => (i.id || i.full) + '\u0001' + i.name).join('\u0002');
+
+  /* ---- 清單：先用本機快取立即顯示，同時在背景向 Google 取最新版 ---- */
+  const canRebuildNow = () => !(state.selectMode || lbOpen || busy);
+  const galleryVisible = () => document.body.dataset.route === 'gallery';
+
+  function setImages(list, sig) {
+    if (galleryVisible() && state.loaded && !canRebuildNow()) { state.pending = { list, sig }; return; }
+    state.images = list; state.sig = sig; state.loaded = true; state.pending = null; state.gridDirty = true;
+    if (galleryVisible()) rebuildGrid(true);
+    renderGalleryHeader();
+  }
+  function flushPending() {
+    if (state.pending && canRebuildNow()) { const p = state.pending; state.pending = null; setImages(p.list, p.sig); }
+  }
+  function useData(raw) {
+    const parsed = parseServer(raw);
+    const sig = signature(parsed.images);
+    if (!state.loaded || sig !== state.sig) setImages(parsed.images, sig);
+  }
+  function refreshData() {
+    if (refreshing) return refreshing;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), CFG.fetchTimeoutMs);
+    const sameOrigin = new URL(CFG.imagesSource, location.href).origin === location.origin;
+    refreshing = fetch(CFG.imagesSource, sameOrigin ? { cache: 'no-cache', signal: ctl.signal } : { signal: ctl.signal })
+      .then((res) => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+      .then((raw) => {
+        useData(raw);
+        data.fetchedAt = Date.now();
+        store.set(DATA_KEY, JSON.stringify({ t: data.fetchedAt, raw }));
+        return true;
+      })
+      .catch((err) => { console.error('[gallery] refresh failed:', err); return false; })
+      .finally(() => { clearTimeout(timer); refreshing = null; });
+    return refreshing;
+  }
+  function loadCached() {
+    try {
+      const c = JSON.parse(store.get(DATA_KEY));
+      if (c && c.raw) { useData(c.raw); data.fetchedAt = c.t || 0; }
+    } catch (_) {}
+  }
+
   function showGalleryState(name) {
     ['loading', 'error', 'empty'].forEach((n) => { $('#g-' + n).hidden = n !== name; });
     $('#grid').hidden = name !== 'grid';
+    if (name !== 'grid') $('#g-sentinel').hidden = true;
   }
   function ensureGallery() {
-    if (state.loaded) { renderGalleryHeader(); return; }
-    loadImages();
-  }
-  async function loadImages() {
-    if (state.loading) return;
-    state.loading = true;
-    showGalleryState('loading');
-    try {
-      const res = await fetch(CFG.imagesSource, { cache: 'no-cache' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      const list = Array.isArray(data) ? data : (data.images || []);
-      state.images = list.map(normalize).filter(Boolean);
-      state.loaded = true;
-      buildGrid();
-      showGalleryState(state.images.length ? 'grid' : 'empty');
-    } catch (err) {
-      console.error('[gallery] load failed:', err);
-      showGalleryState('error');
-    } finally {
-      state.loading = false;
+    if (Date.now() - data.fetchedAt > 60000) refreshData();      // 進入相簿時，若資料超過 1 分鐘就順便更新
+    if (state.loaded) {
+      if (state.gridDirty || !$('#grid').children.length) rebuildGrid(false);
+      else showGalleryState(state.images.length ? 'grid' : 'empty');
       renderGalleryHeader();
+      return;
     }
+    showGalleryState('loading');
+    (refreshing || refreshData()).then(() => { if (!state.loaded) showGalleryState('error'); renderGalleryHeader(); });
   }
-  $('#g-retry').addEventListener('click', loadImages);
+  $('#g-retry').addEventListener('click', () => {
+    showGalleryState('loading');
+    refreshData().then(() => { if (!state.loaded) showGalleryState('error'); });
+  });
+  (function buildSkeleton() {
+    const sk = $('#g-skel');
+    for (let i = 0; i < 12; i++) { const d = document.createElement('div'); d.className = 'tile'; sk.appendChild(d); }
+  })();
 
   /* ================= 相片格線 ================= */
-  const grid = $('#grid');
-  function buildGrid() {
-    grid.textContent = '';
+  const grid = $('#grid'), sentinel = $('#g-sentinel');
+  let rendered = 0, io = null;
+
+  /* 縮圖延遲載入：只載入「可視範圍 + 600px」內的圖片，避免一次對 Google 發出大量請求（更快，也不易被限流） */
+  let imgIO = null;
+  function getImgIO() {
+    if (!imgIO && 'IntersectionObserver' in window) {
+      imgIO = new IntersectionObserver((es) => {
+        es.forEach((e) => {
+          if (!e.isIntersecting) return;
+          const im = e.target.querySelector('img');
+          if (im && im.dataset.src) { im.src = im.dataset.src; im.removeAttribute('data-src'); }
+          imgIO.unobserve(e.target);
+        });
+      }, { rootMargin: '600px 0px' });
+    }
+    return imgIO;
+  }
+  function makeTile(i) {
+    const it = state.images[i];
+    const tile = document.createElement('div');
+    tile.className = 'tile' + (state.selected.has(i) ? ' selected' : '');
+    tile.dataset.index = i;
+    tile.tabIndex = 0;
+    tile.setAttribute('role', 'button');
+    tile.setAttribute('aria-label', it.name);
+
+    const img = document.createElement('img');
+    img.alt = '';
+    img.draggable = false;
+    img.decoding = 'async';
+    img.onload = () => tile.classList.add('loaded');
+    img.onerror = () => tile.classList.add('broken');
+    const url = urlThumb(it, curThumbPx);
+    const lazy = i >= 8 && getImgIO();
+    if (lazy) { img.dataset.src = url; lazy.observe(tile); }   // 接近可視範圍（上下約 600px）才開始下載
+    else { img.fetchPriority = 'high'; img.src = url; }        // 首屏縮圖立刻、優先下載
+
+    const check = document.createElement('span');
+    check.className = 'check';
+    check.setAttribute('aria-hidden', 'true');
+    check.innerHTML = '<svg class="ic"><use href="#i-check"/></svg>';
+    tile.append(img, check);
+    return tile;
+  }
+  /* 分批渲染：一次只建立一批，接近底部時才再建立下一批，數百張也不會卡 */
+  function appendTiles(n) {
+    const end = Math.min(state.images.length, rendered + n);
     const frag = document.createDocumentFragment();
-    state.images.forEach((it, i) => {
-      const tile = document.createElement('div');
-      tile.className = 'tile';
-      tile.dataset.index = i;
-      tile.tabIndex = 0;
-      tile.setAttribute('role', 'button');
-      tile.setAttribute('aria-label', it.name);
-
-      const img = document.createElement('img');
-      img.alt = '';
-      img.draggable = false;
-      img.decoding = 'async';
-      img.loading = 'lazy';
-      img.onload = () => tile.classList.add('loaded');
-      img.onerror = () => tile.classList.add('broken');
-      img.src = it.thumb;
-
-      const check = document.createElement('span');
-      check.className = 'check';
-      check.setAttribute('aria-hidden', 'true');
-      check.innerHTML = '<svg class="ic"><use href="#i-check"/></svg>';
-
-      tile.append(img, check);
-      frag.appendChild(tile);
-    });
+    for (let i = rendered; i < end; i++) frag.appendChild(makeTile(i));
     grid.appendChild(frag);
+    rendered = end;
+    sentinel.hidden = rendered >= state.images.length;
+    if (!sentinel.hidden && io) { io.unobserve(sentinel); io.observe(sentinel); }   // 重新觸發，直到畫面下方補滿
+  }
+  function rebuildGrid(keepScroll) {
+    const y = window.scrollY, keep = keepScroll ? rendered : 0;
+    curThumbPx = thumbPx();
+    if (imgIO) imgIO.disconnect();
+    grid.textContent = '';
+    rendered = 0;
+    state.gridDirty = false;
+    if (!state.images.length) { showGalleryState('empty'); return; }
+    showGalleryState('grid');
+    if ('IntersectionObserver' in window) {
+      if (!io) io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) appendTiles(CFG.chunkSize); }, { rootMargin: '1200px 0px' });
+      appendTiles(Math.max(CFG.chunkSize, keep));
+    } else {
+      appendTiles(state.images.length);
+    }
+    if (keepScroll) window.scrollTo(0, y);
   }
 
   /* ---- 單點 / 長按 ---- */
@@ -693,6 +865,7 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     $('#selbar').classList.remove('show');
     $('#selbar').setAttribute('aria-hidden', 'true');
     refreshSelectionUI();
+    flushPending();
   }
   function setSelected(i, on) {
     const el = tileAt(i);
@@ -729,7 +902,7 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     $('#sel-download').disabled = state.selected.size === 0;
   }
 
-  $('#g-back').addEventListener('click', () => { if (state.selectMode) exitSelectMode(); else go('menu'); });
+  $('#g-back').addEventListener('click', () => { if (state.selectMode) exitSelectMode(); else go('home'); });
   $('#g-selall').addEventListener('click', selectAllToggle);
   $('#sel-cancel').addEventListener('click', exitSelectMode);
   $('#sel-download').addEventListener('click', downloadSelected);
@@ -788,7 +961,7 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
       while (queue.length) {
         const item = state.images[queue.shift()];
         try {
-          const blob = await fetchBlob(item.full);
+          const blob = await fetchBlob(urlDownload(item));
           zip.file(uniqueName(fileNameFor(item, blob), used), blob);
         } catch (err) {
           failed += 1;
@@ -818,17 +991,18 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     } finally {
       hideBusy();
       busy = false;
+      flushPending();
     }
   }
 
   async function downloadSingle(item) {
     toast(t('downloading'), 1600);
     try {
-      const blob = await fetchBlob(item.full);
+      const blob = await fetchBlob(urlDownload(item));
       saveBlob(blob, fileNameFor(item, blob));
     } catch (err) {
       console.warn('[gallery] direct download failed:', err);
-      window.open(item.full, '_blank', 'noopener');      // 雲端空間沒開 CORS 時的備援
+      window.open(urlDownload(item), '_blank', 'noopener');      // 雲端空間沒開 CORS 時的備援
       toast(t('openedInstead'), 3500);
     }
   }
@@ -851,20 +1025,25 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     const token = ++lbToken;
     lbImg.classList.add('dim');
     $('#lb-spinner').hidden = false;
-    lbImg.src = item.thumb;                                // 先顯示縮圖，再換成原圖
+    lbImg.src = urlThumb(item, curThumbPx);                // 先顯示已載入的縮圖（瀏覽器快取），再換成高解析
+    const full = urlPreview(item);
     const pre = new Image();
     pre.onload = () => {
       if (token !== lbToken) return;
-      lbImg.src = item.full;
+      lbImg.src = full;
       lbImg.classList.remove('dim');
       $('#lb-spinner').hidden = true;
+      [lbIndex + 1, lbIndex - 1].forEach((j) => {         // 預載前後各一張，切換時幾乎瞬間顯示
+        const nb = state.images[j];
+        if (nb) new Image().src = urlPreview(nb);
+      });
     };
     pre.onerror = () => {
       if (token !== lbToken) return;
       $('#lb-spinner').hidden = true;
       toast(t('imgFail'));
     };
-    pre.src = item.full;
+    pre.src = full;
     updateLightboxUI();
   }
   function updateLightboxUI() {
@@ -886,6 +1065,7 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     lightbox.hidden = true;
     lbImg.removeAttribute('src');
     document.body.classList.remove('lock');
+    flushPending();
   }
   function closeLightbox() { if (lbOpen) history.back(); }   // 由 popstate 實際關閉
 
@@ -907,15 +1087,31 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) stepLightbox(dx < 0 ? 1 : -1);
   }, { passive: true });
 
-  /* ================= 其他事件 ================= */
-  $$('.lang-panel').forEach((b) => b.addEventListener('click', () => {
-    setLang(b.dataset.lang);
-    tryFullscreen();
-    go('menu');
+  /* ================= 語言下拉選單 ================= */
+  const langSwitch = $('.lang-switch'), langToggle = $('#lang-toggle'), langMenu = $('#lang-menu');
+  function openLangMenu() {
+    langSwitch.classList.add('open');
+    langToggle.setAttribute('aria-expanded', 'true');
+    langMenu.hidden = false;
+  }
+  function closeLangMenu() {
+    langSwitch.classList.remove('open');
+    langToggle.setAttribute('aria-expanded', 'false');
+    langMenu.hidden = true;
+  }
+  langToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (langMenu.hidden) openLangMenu(); else closeLangMenu();
+  });
+  $$('#lang-menu [data-lang]').forEach((li) => li.addEventListener('click', () => {
+    setLang(li.dataset.lang);
+    closeLangMenu();
   }));
-  $('#m-back').addEventListener('click', () => go('lang'));
-  $('#btn-gallery').addEventListener('click', () => go('gallery'));
-  $('#btn-soon').addEventListener('click', openModal);
+  document.addEventListener('click', (e) => { if (!langSwitch.contains(e.target)) closeLangMenu(); });
+
+  /* ================= 其他事件 ================= */
+  $('#btn-gallery').addEventListener('click', () => { tryFullscreen(); go('gallery'); });
+  $('#btn-soon').addEventListener('click', () => { tryFullscreen(); openModal(); });
   $('#modal-ok').addEventListener('click', closeModal);
   $('#modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
 
@@ -927,13 +1123,19 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
       else if (e.key === 'ArrowRight') stepLightbox(1);
       return;
     }
+    if (!langMenu.hidden && e.key === 'Escape') { closeLangMenu(); return; }
     if (e.key === 'Escape' && state.selectMode) exitSelectMode();
   });
 
   /* ================= 啟動 ================= */
   $('#install-hint').hidden = isStandalone();
+  loadCached();          // 有上次的清單就立刻可用
   applyLang();
   render();
+  refreshData();         // 一開啟網頁就在背景向 Google 取最新清單與背景圖，選完語言時通常已備妥
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && Date.now() - data.fetchedAt > 120000) refreshData();
+  });
 
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });

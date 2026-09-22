@@ -1,61 +1,80 @@
+/**
+ * Photo Gallery — Google Apps Script（V1.2，僅供紀錄；請貼到 script.google.com 專案）
+ *
+ * 部署：部署 → 新增部署作業 → 類型「網頁應用程式」
+ *       執行身分：我　　誰可以存取：任何人
+ * 修改程式後，要到「部署 → 管理部署作業 → 編輯 → 版本：新版本 → 部署」，
+ * 網址（/exec）才會套用新程式；網址不變，config.js 不必改。
+ *
+ * 資料夾設定（一次性、手動）：
+ *   在 Google 雲端硬碟對「相簿資料夾」按右鍵 → 共用 → 一般存取權 →「知道連結的任何人」→「檢視者」。
+ *   資料夾內的檔案（包含之後新增的）都會自動沿用這個權限，程式不需要、也不會去改任何檔案的共用設定。
+ *
+ * 資料夾內容：
+ *   - 只要放照片就好，全部都會出現在相簿裡（不含子資料夾）。
+ *   - V1.2 首頁改用內建的照片素材，不再需要 backphoto1 / backphoto2 這兩個檔名，
+ *     資料夾裡如果還留著這兩張舊檔，直接刪除或改名即可（不刪也不影響運作，只是會被當成一般照片顯示）。
+ *
+ * 如果你已經部署過 V1.1 版的 gas.txt：不必重新部署也能正常運作，這一版只是移除了
+ * 網頁端已經用不到的背景圖掃描邏輯，讓回應更快、程式更簡單。想換成這一版的話，
+ * 蓋掉舊程式碼、重新整理部署（見上方「部署」說明）即可，FOLDER_ID 記得比照舊的填。
+ */
+
+var FOLDER_ID   = "123";        // ← 換成相簿資料夾 ID（資料夾網址 /folders/ 後面那串）
+var CACHE_SECS  = 300;          // 清單快取秒數：新增照片後最多約 5 分鐘出現
+var CACHE_KEY   = "gallery_v2";
+var AUTO_SHARE_FILES = false;   // 建議維持 false（原因見 README 的隱私說明）
+
 function doGet() {
-  var FOLDER_ID = "123"; 
   var cache = CacheService.getScriptCache();
-  
-  // 💡 1. 優先讀取整份 JSON 快取（若有快取，0.1 秒內直接回傳）
-  var cachedResponse = cache.get("gallery_json_data");
-  if (cachedResponse) {
-    return ContentService.createTextOutput(cachedResponse)
-      .setMimeType(ContentService.MimeType.JSON);
-  }
+  var hit = cache.get(CACHE_KEY);
+  if (hit) return out_(hit);
 
   try {
-    var folder = DriveApp.getFolderById(FOLDER_ID);
-    var files = folder.getFiles();
+    var files = DriveApp.getFolderById(FOLDER_ID).getFiles();
     var images = [];
 
     while (files.hasNext()) {
-      var file = files.next();
-      var mime = file.getMimeType();
-      
-      if (mime.indexOf("image/") === 0) {
-        var id = file.getId();
-        var cacheKey = "perm_" + id;
+      var f = files.next();
+      if (f.getMimeType().indexOf("image/") !== 0) continue;   // 只處理圖片
 
-        // 💡 2. 自動開啟新圖片權限（背景紀錄 6 小時）
-        if (!cache.get(cacheKey)) {
-          try {
-            file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-            cache.put(cacheKey, "1", 21600);
-          } catch (e) {
-            cache.put(cacheKey, "1", 21600);
-          }
-        }
-
-        var name = file.getName();
-        var directUrl = "https://lh3.googleusercontent.com/d/" + id;
-        
-        images.push({
-          name: name,
-          thumb: directUrl + "=w600",
-          full: directUrl
-        });
-      }
+      if (AUTO_SHARE_FILES) share_(f);
+      images.push({ id: f.getId(), name: f.getName() });        // 只回傳 ID 與檔名，網址由網頁組合
     }
 
-    var result = JSON.stringify({ images: images });
+    images.sort(function (a, b) {
+      return a.name.localeCompare(b.name, "en", { numeric: true });
+    });
 
-    // 💡 3. 將整份 API 結果寫入快取 120 秒（2 分鐘）
-    // 這可確保 99% 的讀取都能在 0.2 秒內完成
-    cache.put("gallery_json_data", result, 120);
+    var json = JSON.stringify({ v: 2, images: images });
+    try { cache.put(CACHE_KEY, json, CACHE_SECS); } catch (e) {}  // 超過 100KB 時略過快取，不影響回傳
+    return out_(json);
 
-    return ContentService.createTextOutput(result)
-      .setMimeType(ContentService.MimeType.JSON);
-      
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ 
-      error: error.toString(), 
-      images: [] 
-    })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    console.error(err);                                           // 詳細錯誤只寫入 Apps Script 執行記錄
+    return out_(JSON.stringify({ v: 2, error: "server_error", images: [] }));
   }
+}
+
+function out_(text) {
+  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);
+}
+
+/** 只有 AUTO_SHARE_FILES = true 時才會用到：把單一檔案設為「知道連結者可檢視」 */
+function share_(file) {
+  var cache = CacheService.getScriptCache();
+  var key = "perm_" + file.getId();
+  if (cache.get(key)) return;
+  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
+  cache.put(key, "1", 21600);
+}
+
+/** 手動工具：在編輯器選這個函式按「執行」，可立即清除快取（例如剛新增了照片，不想等 5 分鐘） */
+function clearCache() {
+  CacheService.getScriptCache().remove(CACHE_KEY);
+}
+
+/** 手動工具：第一次部署前先執行一次，會跳出授權視窗；並在「執行記錄」顯示回傳內容 */
+function testRun() {
+  Logger.log(doGet().getContent());
 }
