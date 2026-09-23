@@ -734,7 +734,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   }
   const signature = (imgs) => imgs.map((i) => (i.id || i.full) + '\u0001' + i.name).join('\u0002');
 
-  /* ---- 清單：先用本機快取立即顯示，同時在背景向 Google 取最新版 ---- */
+  /* ---- 清單：先用本機快取領域顯示，同時在背景向 Google 取最新版 ---- */
   const canRebuildNow = () => !(state.selectMode || lbOpen || busy);
   const galleryVisible = () => document.body.dataset.route === 'gallery';
 
@@ -1016,7 +1016,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     const u = URL.createObjectURL(blob);
     a.href = u; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(u), 4000);
+    setTimeout(() => URL.revokeObjectURL(u), 10000);
   }
   const stamp = () => {
     const d = new Date(), p = (n) => String(n).padStart(2, '0');
@@ -1054,7 +1054,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     };
 
     try {
-      await Promise.all(Array.from({ length: Math.min(4, total) }, worker));
+      await Promise.all(Array.from({ length: Math.min(3, total) }, worker));
       if (failed === total) { toast(t('allFail'), 4500); return; }
 
       const out = await zip.generateAsync(
@@ -1123,6 +1123,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     };
     pre.onerror = () => {
       if (token !== lbToken) return;
+      lbImg.classList.remove('dim');
       $('#lb-spinner').hidden = true;
       toast(t('imgFail'));
     };
@@ -1298,7 +1299,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   $('#u-refresh').addEventListener('click', () => {
     const icon = $('#u-refresh .ic');
     icon.style.animation = 'spin .6s linear';
-    refreshUploads().then((changed) => { toast(t(changed ? 'refreshed' : 'refreshed')); }).catch(() => toast(t('refreshFailed')));
+    refreshUploads().then((changed) => { toast(t('refreshed')); }).catch(() => toast(t('refreshFailed')));
     setTimeout(() => { icon.style.animation = ''; }, 650);
   });
 
@@ -1401,8 +1402,6 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
       else { netCount += 1; toast(t('uploadNetErr', { name: file.name }), 3000); }
     }
     hideBusy();
-    // 每個失敗的檔案在迴圈裡已經各自顯示過原因（太大/格式不符/網路錯誤），
-    // 這裡只在最後補一個成功摘要，避免兩個 toast 互相蓋掉、看不清楚發生了什麼事。
     if (okCount) toast(tn('uploadOk', okCount));
     if (okCount) { store.set(UP_KEY, JSON.stringify({ t: Date.now(), raw: { v: 2, images: uploadState.images.map((it) => ({ id: it.id, name: it.name })) } })); }
   }
@@ -1449,9 +1448,10 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   /* ================= 啟動 ================= */
   $('#install-hint').hidden = isStandalone();
   loadCached();          // 有上次的清單就立刻可用
+  loadCachedUploads();
   applyLang();
   render();
-  refreshData();         // 一開啟網頁就在背景向 Google 取最新清單與背景圖，選完語言時通常已備妥
+  refreshData();         // 一開啟網頁就在背景向 Google 取最新清單與背景圖
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && Date.now() - data.fetchedAt > 120000) refreshData();
   });
