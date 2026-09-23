@@ -1,5 +1,5 @@
 /* Service Worker：讓網頁可安裝成 PWA，並在離線時仍能開啟介面 */
-const CACHE = 'gallery-shell-v3';
+const CACHE = 'gallery-shell-v4';
 const SHELL = [
   './',
   'index.html',

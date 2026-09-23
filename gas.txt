@@ -1,59 +1,141 @@
 /**
- * Photo Gallery — Google Apps Script（V1.2，僅供紀錄；請貼到 script.google.com 專案）
+ * Photo Gallery — Google Apps Script（V1.3，僅供紀錄；請貼到 script.google.com 專案）
  *
  * 部署：部署 → 新增部署作業 → 類型「網頁應用程式」
  *       執行身分：我　　誰可以存取：任何人
  * 修改程式後，要到「部署 → 管理部署作業 → 編輯 → 版本：新版本 → 部署」，
  * 網址（/exec）才會套用新程式；網址不變，config.js 不必改。
  *
- * 資料夾設定（一次性、手動）：
- *   在 Google 雲端硬碟對「相簿資料夾」按右鍵 → 共用 → 一般存取權 →「知道連結的任何人」→「檢視者」。
- *   資料夾內的檔案（包含之後新增的）都會自動沿用這個權限，程式不需要、也不會去改任何檔案的共用設定。
+ * ============================== V1.3 新增：訪客上傳 ==============================
+ * 這一版管理「兩個」雲端硬碟資料夾：
+ *   - GALLERY_FOLDER_ID：新人自己精選的相簿（跟之前一樣，唯讀，只有你自己放照片進去）
+ *   - UPLOAD_FOLDER_ID ：訪客上傳專用資料夾，跟精選相簿完全分開。訪客只能「新增」照片到
+ *                        這裡，網頁沒有任何刪除或修改功能；所有訪客都看得到這個資料夾裡的照片。
  *
- * 資料夾內容：
- *   - 只要放照片就好，全部都會出現在相簿裡（不含子資料夾）。
- *   - V1.2 首頁改用內建的照片素材，不再需要 backphoto1 / backphoto2 這兩個檔名，
- *     資料夾裡如果還留著這兩張舊檔，直接刪除或改名即可（不刪也不影響運作，只是會被當成一般照片顯示）。
+ * 設定步驟：
+ *   1. 在雲端硬碟建立「兩個」資料夾，例如 `photo`（精選相簿）與 `photo-uploads`（訪客上傳）。
+ *   2. 兩個資料夾都要設定共用：按右鍵 → 共用 → 一般存取權 →「知道連結的任何人」→「檢視者」。
+ *      （檢視者權限即可，不要選「編輯者」——寫入是由這支 Apps Script 用你的身分執行，
+ *      訪客本人不需要、也不會拿到資料夾的編輯權限。）
+ *   3. 把兩個資料夾的 ID 分別填入下面的 GALLERY_FOLDER_ID、UPLOAD_FOLDER_ID
+ *      （資料夾網址 `/folders/` 後面那一串）。
+ *   4. 部署（或重新部署）這支程式，網址跟 config.js 都不用改。
  *
- * 如果你已經部署過 V1.1 版的 gas.txt：不必重新部署也能正常運作，這一版只是移除了
- * 網頁端已經用不到的背景圖掃描邏輯，讓回應更快、程式更簡單。想換成這一版的話，
- * 蓋掉舊程式碼、重新整理部署（見上方「部署」說明）即可，FOLDER_ID 記得比照舊的填。
+ * 這支程式對訪客上傳資料夾「只開放寫入」：
+ *   - 只有 doPost 能新增檔案，且一定是新建立的檔案（DriveApp.createFile），不會覆蓋、
+ *     不會刪除、也不會修改任何既有檔案。
+ *   - 沒有任何刪除、改名、覆蓋既有檔案的程式碼路徑；action 只接受 "upload"，其他一律拒絕。
+ *   - 想清掉不恰當的上傳，請直接到雲端硬碟裡手動刪除，這支程式不提供、也不應該提供這個功能
+ *     給訪客（見 README「隱私與安全評估」）。
+ * ================================================================================
  */
 
-var FOLDER_ID   = "123";        // ← 換成相簿資料夾 ID（資料夾網址 /folders/ 後面那串）
-var CACHE_SECS  = 300;          // 清單快取秒數：新增照片後最多約 5 分鐘出現
-var CACHE_KEY   = "gallery_v2";
-var AUTO_SHARE_FILES = false;   // 建議維持 false（原因見 README 的隱私說明）
+var GALLERY_FOLDER_ID = "123";        // ← 換成「精選相簿」資料夾 ID
+var UPLOAD_FOLDER_ID  = "456";        // ← 換成「訪客上傳」資料夾 ID（跟上面不同的資料夾）
 
-function doGet() {
+var GALLERY_CACHE_SECS = 300;         // 精選相簿清單快取秒數
+var UPLOADS_CACHE_SECS = 20;          // 訪客上傳清單快取秒數（故意設短，下拉更新才會感覺得到變化）
+var GALLERY_CACHE_KEY  = "gallery_v2";
+var UPLOADS_CACHE_KEY  = "uploads_v1";
+
+var AUTO_SHARE_FILES   = false;       // 建議維持 false（原因見 README 的隱私說明）
+
+var MAX_UPLOAD_BYTES     = 20 * 1024 * 1024;   // 單檔 20MB，跟網頁 config.js 的 uploadMaxBytes 一致
+var ALLOWED_UPLOAD_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif"];
+var MAX_UPLOADS_PER_MINUTE = 20;      // 基本防濫用：全站每分鐘最多這麼多張，超過會請訪客稍後再試
+
+function doGet(e) {
+  var action = (e && e.parameter && e.parameter.action) || "gallery";
+  if (action === "uploads") return listFolder_(UPLOAD_FOLDER_ID, UPLOADS_CACHE_KEY, UPLOADS_CACHE_SECS, true);
+  return listFolder_(GALLERY_FOLDER_ID, GALLERY_CACHE_KEY, GALLERY_CACHE_SECS, false);
+}
+
+function doPost(e) {
+  try {
+    var body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
+
+    // 白名單制：只認得 "upload"，其餘一律拒絕，確保這支端點不會被拿來做別的事（例如刪除、覆蓋）。
+    if (body.action !== "upload") return out_(JSON.stringify({ ok: false, error: "bad_action" }));
+
+    if (!rateLimitOk_()) return out_(JSON.stringify({ ok: false, error: "rate_limited" }));
+
+    var mimeType = String(body.mimeType || "");
+    if (ALLOWED_UPLOAD_TYPES.indexOf(mimeType) === -1) {
+      return out_(JSON.stringify({ ok: false, error: "bad_type" }));
+    }
+    if (!body.data) return out_(JSON.stringify({ ok: false, error: "no_data" }));
+
+    var bytes;
+    try { bytes = Utilities.base64Decode(body.data); }
+    catch (err) { return out_(JSON.stringify({ ok: false, error: "bad_data" })); }
+
+    if (bytes.length > MAX_UPLOAD_BYTES) return out_(JSON.stringify({ ok: false, error: "too_big" }));
+    if (bytes.length === 0) return out_(JSON.stringify({ ok: false, error: "no_data" }));
+
+    var safeName = sanitizeName_(body.filename) || "photo";
+    var stamped = Utilities.formatDate(new Date(), "UTC", "yyyyMMdd-HHmmss") + "-" + Math.random().toString(36).slice(2, 7) + "_" + safeName;
+
+    var blob = Utilities.newBlob(bytes, mimeType, stamped);
+    var folder = DriveApp.getFolderById(UPLOAD_FOLDER_ID);
+    var file = folder.createFile(blob);   // 只會新建檔案；這支程式沒有任何刪除/覆蓋既有檔案的程式碼路徑
+    if (AUTO_SHARE_FILES) share_(file);
+
+    try { CacheService.getScriptCache().remove(UPLOADS_CACHE_KEY); } catch (err) {}  // 讓下一次「下拉更新」立刻看到這張
+
+    return out_(JSON.stringify({ ok: true, id: file.getId(), name: file.getName() }));
+
+  } catch (err) {
+    console.error(err);
+    return out_(JSON.stringify({ ok: false, error: "server_error" }));
+  }
+}
+
+/** 讀取一個資料夾底下的圖片清單。uploads=true 時依上傳時間新到舊排序；否則依檔名排序（精選相簿）。 */
+function listFolder_(folderId, cacheKey, cacheSecs, newestFirst) {
   var cache = CacheService.getScriptCache();
-  var hit = cache.get(CACHE_KEY);
+  var hit = cache.get(cacheKey);
   if (hit) return out_(hit);
 
   try {
-    var files = DriveApp.getFolderById(FOLDER_ID).getFiles();
+    var files = DriveApp.getFolderById(folderId).getFiles();
     var images = [];
 
     while (files.hasNext()) {
       var f = files.next();
-      if (f.getMimeType().indexOf("image/") !== 0) continue;   // 只處理圖片
-
+      if (f.getMimeType().indexOf("image/") !== 0) continue;
       if (AUTO_SHARE_FILES) share_(f);
-      images.push({ id: f.getId(), name: f.getName() });        // 只回傳 ID 與檔名，網址由網頁組合
+      images.push({ id: f.getId(), name: f.getName(), t: f.getDateCreated().getTime() });
     }
 
     images.sort(function (a, b) {
-      return a.name.localeCompare(b.name, "en", { numeric: true });
+      return newestFirst ? b.t - a.t : a.name.localeCompare(b.name, "en", { numeric: true });
     });
+    images.forEach(function (it) { delete it.t; });   // t 只用來排序，不需要回傳給網頁
 
     var json = JSON.stringify({ v: 2, images: images });
-    try { cache.put(CACHE_KEY, json, CACHE_SECS); } catch (e) {}  // 超過 100KB 時略過快取，不影響回傳
+    try { cache.put(cacheKey, json, cacheSecs); } catch (e) {}   // 超過 100KB 時略過快取，不影響回傳
     return out_(json);
 
   } catch (err) {
-    console.error(err);                                           // 詳細錯誤只寫入 Apps Script 執行記錄
+    console.error(err);
     return out_(JSON.stringify({ v: 2, error: "server_error", images: [] }));
   }
+}
+
+/** 基本防濫用：用 CacheService 做一個「每分鐘」的全站上傳計數器。非嚴謹的原子操作，
+ *  但足以擋掉單純的洗版/灌爆流量；不是為了防禦有心人刻意繞過的機制。 */
+function rateLimitOk_() {
+  var cache = CacheService.getScriptCache();
+  var key = "uploads_in_" + Math.floor(Date.now() / 60000);
+  var n = Number(cache.get(key) || "0") + 1;
+  try { cache.put(key, String(n), 70); } catch (e) {}
+  return n <= MAX_UPLOADS_PER_MINUTE;
+}
+
+/** 檔名清乾淨：只保留常見安全字元，避免奇怪的檔名造成困擾（Drive 檔名不是路徑，沒有目錄穿越風險，這裡純粹是為了整潔）。 */
+function sanitizeName_(name) {
+  var s = String(name || "").replace(/[\/\\?%*:|"<>]/g, "_").trim();
+  return s.slice(0, 120);
 }
 
 function out_(text) {
@@ -69,12 +151,12 @@ function share_(file) {
   cache.put(key, "1", 21600);
 }
 
-/** 手動工具：在編輯器選這個函式按「執行」，可立即清除快取（例如剛新增了照片，不想等 5 分鐘） */
-function clearCache() {
-  CacheService.getScriptCache().remove(CACHE_KEY);
-}
+/** 手動工具：新增照片、刪除照片後不想等快取過期，可在編輯器執行這兩個函式立即清快取 */
+function clearCache() { CacheService.getScriptCache().remove(GALLERY_CACHE_KEY); }
+function clearUploadsCache() { CacheService.getScriptCache().remove(UPLOADS_CACHE_KEY); }
 
 /** 手動工具：第一次部署前先執行一次，會跳出授權視窗；並在「執行記錄」顯示回傳內容 */
 function testRun() {
-  Logger.log(doGet().getContent());
+  Logger.log(doGet({ parameter: {} }).getContent());
+  Logger.log(doGet({ parameter: { action: "uploads" } }).getContent());
 }

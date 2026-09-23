@@ -206,6 +206,28 @@ body{background:#3a4032}   /* 桌面版卡片外的環境色，取自照片的�
 .skeleton .tile{pointer-events:none}
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
+/* ========== 訪客上傳：下拉更新、新增照片 ========== */
+.pull-wrap{position:relative;overflow:hidden}
+.pull-indicator{
+  position:absolute;left:0;right:0;top:0;height:0;display:flex;align-items:center;justify-content:center;gap:8px;
+  overflow:hidden;color:var(--muted);font-size:13px;
+}
+.pull-arrow{width:17px;height:17px;transition:transform .2s ease}
+.pull-wrap.armed .pull-arrow{transform:rotate(180deg)}
+.pull-wrap.loading .pull-arrow{display:none}
+.pull-spinner{width:16px;height:16px;border-width:2px}
+.pull-body{transition:transform .25s cubic-bezier(.2,.8,.2,1)}
+.pull-wrap.dragging .pull-body{transition:none}
+
+.fab{
+  position:fixed;z-index:15;right:max(18px,var(--safe-r));bottom:calc(22px + var(--safe-b));
+  display:inline-flex;align-items:center;gap:9px;height:52px;padding:0 22px 0 18px;border:0;border-radius:999px;
+  background:var(--btn);color:var(--btn-ink);font-family:var(--font-display);font-weight:600;font-size:15px;
+  box-shadow:0 10px 24px rgba(0,0,0,.28);cursor:pointer;transition:transform .15s ease;
+}
+.fab .ic{width:20px;height:20px}
+.fab:active{transform:scale(.96)}
+
 /* Bottom download bar */
 .selbar{
   position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:center;gap:10px;
@@ -261,7 +283,8 @@ body{background:#3a4032}   /* 桌面版卡片外的環境色，取自照片的�
   box-shadow:0 10px 30px rgba(0,0,0,.5);opacity:0;transform:translate(-50%,12px);pointer-events:none;transition:opacity .2s,transform .2s;
 }
 .toast.show{opacity:1;transform:translate(-50%,0)}
-body.selecting .toast{bottom:calc(92px + var(--safe-b))}
+body.selecting .toast,
+body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
 
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
@@ -282,6 +305,8 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
   <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.7 9.5h16.6M3.7 14.5h16.6M12 3.5c2.4 2.4 3.7 5.3 3.7 8.5s-1.3 6.1-3.7 8.5c-2.4-2.4-3.7-5.3-3.7-8.5S9.6 5.9 12 3.5z"/></symbol>
   <symbol id="i-chevdown" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
   <symbol id="i-cloud-up" viewBox="0 0 24 24"><path d="M7.5 18a4.5 4.5 0 0 1-.6-8.96 5.5 5.5 0 0 1 10.7-1.7A4.25 4.25 0 0 1 17 18H7.5z"/><path d="M12 15.2V9.8M9.3 12.4L12 9.7l2.7 2.7"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
 </svg>
 
 <noscript><p style="padding:24px">This page needs JavaScript. 請開啟 JavaScript。</p></noscript>
@@ -327,9 +352,9 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
             <span class="paper-btn-label" data-i18n="btnGallery"></span>
             <svg class="ic paper-btn-arrow"><use href="#i-next"/></svg>
           </button>
-          <button class="paper-btn" id="btn-soon">
+          <button class="paper-btn" id="btn-upload">
             <span class="paper-btn-icon"><svg class="ic"><use href="#i-cloud-up"/></svg></span>
-            <span class="paper-btn-label" data-i18n="btnSoon"></span>
+            <span class="paper-btn-label" data-i18n="btnUpload"></span>
             <svg class="ic paper-btn-arrow"><use href="#i-next"/></svg>
           </button>
         </div>
@@ -363,6 +388,36 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
   <div id="g-sentinel" style="height:1px" hidden></div>
 </section>
 
+<!-- ============ 訪客上傳（共用資料夾，所有人都看得到） ============ -->
+<section class="page" data-page="upload" id="page-upload" hidden>
+  <header class="topbar">
+    <button class="icon-btn" id="u-back"><svg class="ic"><use href="#i-back"/></svg></button>
+    <div class="topbar-title"><h1 data-i18n="uploadTitle"></h1><p id="u-sub" hidden></p></div>
+    <button class="icon-btn" id="u-refresh" data-i18n-aria="refreshIcon"><svg class="ic"><use href="#i-refresh"/></svg></button>
+  </header>
+
+  <div class="pull-wrap" id="pull-wrap">
+    <div class="pull-indicator" id="pull-indicator">
+      <svg class="ic pull-arrow" id="pull-arrow"><use href="#i-chevdown"/></svg>
+      <div class="spinner pull-spinner" id="pull-spinner" hidden></div>
+      <span id="pull-label"></span>
+    </div>
+    <div class="pull-body" id="pull-body">
+      <p class="g-hint" id="u-sub-hint" data-i18n="uploadSub"></p>
+
+      <div id="u-loading" role="status"><div class="grid skeleton" id="u-skel" aria-hidden="true"></div><span class="sr-only" data-i18n="loading"></span></div>
+      <div class="state" id="u-error" hidden><p data-i18n="uploadLoadFailed"></p><button class="btn ghost" id="u-retry" data-i18n="retry"></button></div>
+      <div class="state" id="u-empty" hidden><svg class="ic" style="width:30px;height:30px;color:var(--muted)"><use href="#i-image"/></svg><p data-i18n="uploadEmpty"></p></div>
+
+      <main class="grid" id="u-grid" hidden></main>
+      <div id="u-sentinel" style="height:1px" hidden></div>
+    </div>
+  </div>
+
+  <input type="file" id="u-file" accept="image/*" multiple hidden>
+  <button class="fab" id="u-add"><svg class="ic"><use href="#i-plus"/></svg><span data-i18n="addPhotos"></span></button>
+</section>
+
 <!-- 底部下載欄 -->
 <div class="selbar" id="selbar" aria-hidden="true">
   <div class="count" id="sel-count"></div>
@@ -384,16 +439,6 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
   <div class="lb-stage">
     <img id="lb-img" alt="" draggable="false">
     <div class="spinner lb-spinner" id="lb-spinner" hidden></div>
-  </div>
-</div>
-
-<!-- 「敬請期待」提示 -->
-<div class="overlay" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
-  <div class="dialog">
-    <svg class="ic" style="width:30px;height:30px;color:var(--accent)"><use href="#i-sparkle"/></svg>
-    <h3 id="modal-title" data-i18n="soonTitle"></h3>
-    <p data-i18n="soonMsg"></p>
-    <button class="btn primary" id="modal-ok" data-i18n="ok"></button>
   </div>
 </div>
 
@@ -428,7 +473,8 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     googleBase: 'https://lh3.googleusercontent.com/d/',
     downloadPx: 0,               // 0 = 原始大小；也可填 2048 之類，縮小 zip 體積
     chunkSize: 60,               // 相簿每批渲染幾張
-    fetchTimeoutMs: 30000
+    fetchTimeoutMs: 30000,
+    uploadMaxBytes: 20 * 1024 * 1024   // 訪客上傳單檔大小上限（20MB），須與 gas.txt 的 MAX_UPLOAD_BYTES 一致
   }, window.APP_CONFIG || {});
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -445,9 +491,7 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
       docTitle: 'Yuan Kuan & Cristine · 婚禮相簿',
       heroTagline: '我們的婚禮',
       btnGallery: '相片集',
-      btnSoon: '上傳照片',
-      soonTitle: '上傳交由雲端管理',
-      soonMsg: '為保護相片安全，新增或刪除照片僅能透過雲端空間後台操作。這裡提供瀏覽與下載，如需加入照片，請聯絡新人。',
+      btnUpload: '上傳照片',
       ok: '知道了',
       back: '返回',
       galleryTitle: '圖片預覽',
@@ -475,15 +519,33 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
       openedInstead: '無法直接下載，已在新分頁開啟相片。',
       imgFail: '這張相片載入失敗',
       libMissing: '打包元件沒有載入。請檢查網路後重新整理頁面。',
-      installHint: '想隱藏網址列？在瀏覽器選單選「加入主畫面」，之後從主畫面開啟即可全螢幕瀏覽。'
+      installHint: '想隱藏網址列？在瀏覽器選單選「加入主畫面」，之後從主畫面開啟即可全螢幕瀏覽。',
+      uploadTitle: '訪客照片',
+      uploadSub: '大家上傳的照片，所有人都看得到',
+      uploadCountOne: '共 1 張',
+      uploadCount: '共 {n} 張',
+      uploadEmpty: '還沒有人上傳照片，當第一個分享的人吧！',
+      uploadLoadFailed: '無法載入照片，請檢查網路後再試一次。',
+      addPhotos: '新增照片',
+      pullToRefresh: '下拉以更新',
+      releaseToRefresh: '放開以更新',
+      refreshing: '更新中…',
+      refreshed: '已更新',
+      refreshFailed: '更新失敗，請稍後再試',
+      uploading: '正在上傳… {done} / {total}',
+      uploadOkOne: '已上傳 1 張照片',
+      uploadOk: '已上傳 {n} 張照片',
+      uploadTooBig: '{name} 超過 20MB，已略過',
+      uploadWrongType: '{name} 不是圖片格式，已略過',
+      uploadRateLimited: '目前上傳的人有點多，請稍後再試',
+      uploadNetErr: '{name} 上傳失敗（網路或伺服器錯誤）',
+      refreshIcon: '重新整理'
     },
     en: {
       docTitle: 'Yuan Kuan & Cristine · Wedding Gallery',
       heroTagline: 'Our Wedding Day',
       btnGallery: 'Photo Gallery',
-      btnSoon: 'Upload Photo',
-      soonTitle: 'Uploads are managed in the cloud',
-      soonMsg: 'To keep photos safe, adding or removing them is only done through the couple\u2019s cloud storage. This page is for browsing and downloading — please contact the couple to add photos.',
+      btnUpload: 'Upload Photo',
       ok: 'Got it',
       back: 'Back',
       galleryTitle: 'Photo Gallery',
@@ -513,7 +575,27 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
       openedInstead: 'Direct download isn\u2019t available, so the photo opened in a new tab.',
       imgFail: 'This photo failed to load',
       libMissing: 'The zip component didn\u2019t load. Check your connection and reload the page.',
-      installHint: 'Want to hide the address bar? Choose \u201cAdd to Home Screen\u201d in your browser menu, then open the app from your home screen.'
+      installHint: 'Want to hide the address bar? Choose \u201cAdd to Home Screen\u201d in your browser menu, then open the app from your home screen.',
+      uploadTitle: 'Guest Photos',
+      uploadSub: 'Shared by everyone \u2014 visible to all visitors',
+      uploadCount: '{n} photos',
+      uploadCountOne: '1 photo',
+      uploadEmpty: 'No photos yet \u2014 be the first to share one!',
+      uploadLoadFailed: 'Couldn\u2019t load photos. Check your connection and try again.',
+      addPhotos: 'Add Photos',
+      pullToRefresh: 'Pull to refresh',
+      releaseToRefresh: 'Release to refresh',
+      refreshing: 'Refreshing\u2026',
+      refreshed: 'Updated',
+      refreshFailed: 'Refresh failed, please try again',
+      uploading: 'Uploading\u2026 {done} / {total}',
+      uploadOk: '{n} photos uploaded',
+      uploadOkOne: '1 photo uploaded',
+      uploadTooBig: '{name} is over 20MB and was skipped',
+      uploadWrongType: '{name} isn\u2019t an image and was skipped',
+      uploadRateLimited: 'Lots of uploads right now \u2014 please try again shortly',
+      uploadNetErr: '{name} failed to upload (network or server error)',
+      refreshIcon: 'Refresh'
     }
   };
   const fallbackLang = (navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
@@ -564,7 +646,7 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
   const pages = $$('.page');
   function parseRoute() {
     const h = location.hash.replace(/^#\/?/, '');
-    return h === 'gallery' ? h : 'home';
+    return h === 'gallery' || h === 'upload' ? h : 'home';
   }
   function go(r) { location.hash = '#/' + r; }
   function render() {
@@ -576,6 +658,7 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     document.body.dataset.route = r;
     window.scrollTo(0, 0);
     if (r === 'gallery') ensureGallery();
+    if (r === 'upload') ensureUploads();
   }
   window.addEventListener('hashchange', render);
 
@@ -601,8 +684,6 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.classList.remove('show'), ms);
   }
-  const openModal = () => { $('#modal').hidden = false; $('#modal-ok').focus(); };
-  const closeModal = () => { $('#modal').hidden = true; };
   function showBusy(text, pct) {
     $('#busy').hidden = false;
     $('#busy-text').textContent = text;
@@ -835,7 +916,7 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     if (longPressed) { longPressed = false; return; }   // 長按放開後產生的 click 要略過
     const idx = +tile.dataset.index;
     if (state.selectMode) toggleSelect(idx);
-    else openLightbox(idx);
+    else openLightbox(idx, state.images, curThumbPx);
   });
   grid.addEventListener('keydown', (e) => {
     if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('tile')) {
@@ -1010,8 +1091,10 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
   /* ================= 燈箱 ================= */
   const lightbox = $('#lightbox'), lbImg = $('#lb-img');
   let lbOpen = false, lbIndex = -1, lbToken = 0;
+  let lbList = [], lbThumbPx = 400;                          // 燈箱可以顯示「相片集」或「訪客照片」，由開啟時指定
 
-  function openLightbox(i) {
+  function openLightbox(i, list, thumbPx_) {
+    lbList = list; lbThumbPx = thumbPx_;
     lbIndex = i;
     lbOpen = true;
     lightbox.hidden = false;
@@ -1020,12 +1103,12 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     showLbImage();
   }
   function showLbImage() {
-    const item = state.images[lbIndex];
+    const item = lbList[lbIndex];
     if (!item) return;
     const token = ++lbToken;
     lbImg.classList.add('dim');
     $('#lb-spinner').hidden = false;
-    lbImg.src = urlThumb(item, curThumbPx);                // 先顯示已載入的縮圖（瀏覽器快取），再換成高解析
+    lbImg.src = urlThumb(item, lbThumbPx);                  // 先顯示已載入的縮圖（瀏覽器快取），再換成高解析
     const full = urlPreview(item);
     const pre = new Image();
     pre.onload = () => {
@@ -1034,7 +1117,7 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
       lbImg.classList.remove('dim');
       $('#lb-spinner').hidden = true;
       [lbIndex + 1, lbIndex - 1].forEach((j) => {         // 預載前後各一張，切換時幾乎瞬間顯示
-        const nb = state.images[j];
+        const nb = lbList[j];
         if (nb) new Image().src = urlPreview(nb);
       });
     };
@@ -1048,13 +1131,13 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
   }
   function updateLightboxUI() {
     if (!lbOpen) return;
-    $('#lb-counter').textContent = (lbIndex + 1) + ' / ' + state.images.length;
+    $('#lb-counter').textContent = (lbIndex + 1) + ' / ' + lbList.length;
     $('#lb-prev').disabled = lbIndex <= 0;
-    $('#lb-next').disabled = lbIndex >= state.images.length - 1;
+    $('#lb-next').disabled = lbIndex >= lbList.length - 1;
   }
   function stepLightbox(d) {
     const n = lbIndex + d;
-    if (n < 0 || n >= state.images.length) return;
+    if (n < 0 || n >= lbList.length) return;
     lbIndex = n;
     showLbImage();
   }
@@ -1071,7 +1154,7 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
 
   window.addEventListener('popstate', () => { if (lbOpen) hideLightboxNow(); });
   $('#lb-close').addEventListener('click', closeLightbox);
-  $('#lb-download').addEventListener('click', () => downloadSingle(state.images[lbIndex]));
+  $('#lb-download').addEventListener('click', () => downloadSingle(lbList[lbIndex]));
   $('#lb-prev').addEventListener('click', () => stepLightbox(-1));
   $('#lb-next').addEventListener('click', () => stepLightbox(1));
 
@@ -1086,6 +1169,245 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
     const p = e.changedTouches[0], dx = p.clientX - sx, dy = p.clientY - sy;
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) stepLightbox(dx < 0 ? 1 : -1);
   }, { passive: true });
+
+  /* ================= 訪客上傳（獨立資料夾，所有人共用） ================= */
+  const UP_KEY = 'gallery.uploads.v1';
+  const uploadState = { images: [], loaded: false, sig: '', fetchedAt: 0, loading: false };
+  const uGrid = $('#u-grid'), uSentinel = $('#u-sentinel');
+  let uRendered = 0, uIo = null, uImgIO = null, uCurThumbPx = 400;
+
+  const uploadsUrl = () => CFG.imagesSource + (CFG.imagesSource.indexOf('?') === -1 ? '?' : '&') + 'action=uploads';
+
+  function showUploadState(name) {
+    ['loading', 'error', 'empty'].forEach((n) => { $('#u-' + n).hidden = n !== name; });
+    uGrid.hidden = name !== 'grid';
+  }
+  function uGetImgIO() {
+    if (!uImgIO && 'IntersectionObserver' in window) {
+      uImgIO = new IntersectionObserver((es) => {
+        es.forEach((e) => {
+          if (!e.isIntersecting) return;
+          const im = e.target.querySelector('img');
+          if (im && im.dataset.src) { im.src = im.dataset.src; im.removeAttribute('data-src'); }
+          uImgIO.unobserve(e.target);
+        });
+      }, { rootMargin: '600px 0px' });
+    }
+    return uImgIO;
+  }
+  function uMakeTile(i) {
+    const it = uploadState.images[i];
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.tabIndex = 0;
+    tile.setAttribute('role', 'button');
+    tile.setAttribute('aria-label', it.name);
+    const img = document.createElement('img');
+    img.alt = ''; img.draggable = false; img.decoding = 'async';
+    img.onload = () => tile.classList.add('loaded');
+    img.onerror = () => tile.classList.add('broken');
+    const url = urlThumb(it, uCurThumbPx);
+    const lazy = i >= 8 && uGetImgIO();
+    if (lazy) { img.dataset.src = url; lazy.observe(tile); }
+    else { img.fetchPriority = 'high'; img.src = url; }
+    tile.appendChild(img);
+    tile.addEventListener('click', () => openLightbox(i, uploadState.images, uCurThumbPx));
+    tile.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tile.click(); } });
+    return tile;
+  }
+  function uAppendTiles(n) {
+    const end = Math.min(uploadState.images.length, uRendered + n);
+    const frag = document.createDocumentFragment();
+    for (let i = uRendered; i < end; i++) frag.appendChild(uMakeTile(i));
+    uGrid.appendChild(frag);
+    uRendered = end;
+    uSentinel.hidden = uRendered >= uploadState.images.length;
+    if (!uSentinel.hidden && uIo) { uIo.unobserve(uSentinel); uIo.observe(uSentinel); }
+  }
+  function uRebuildGrid() {
+    uCurThumbPx = thumbPx();
+    if (uImgIO) uImgIO.disconnect();
+    uGrid.textContent = '';
+    uRendered = 0;
+    if (!uploadState.images.length) { showUploadState('empty'); return; }
+    showUploadState('grid');
+    if ('IntersectionObserver' in window) {
+      if (!uIo) uIo = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) uAppendTiles(CFG.chunkSize); }, { root: null, rootMargin: '1200px 0px' });
+      uAppendTiles(CFG.chunkSize);
+    } else {
+      uAppendTiles(uploadState.images.length);
+    }
+  }
+  (function buildUploadSkeleton() {
+    const sk = $('#u-skel');
+    for (let i = 0; i < 9; i++) { const d = document.createElement('div'); d.className = 'tile'; sk.appendChild(d); }
+  })();
+
+  function renderUploadHeader() {
+    const sub = $('#u-sub');
+    if (uploadState.loaded) { sub.textContent = tn('uploadCount', uploadState.images.length); sub.hidden = false; }
+    else sub.hidden = true;
+  }
+  const uploadPageVisible = () => document.body.dataset.route === 'upload';
+  function useUploadData(raw) {
+    const parsed = parseServer(raw);
+    const sig = signature(parsed.images);
+    if (uploadState.loaded && sig === uploadState.sig) return false;
+    uploadState.images = parsed.images;   // 由伺服器依上傳時間新到舊排序
+    uploadState.sig = sig;
+    uploadState.loaded = true;
+    renderUploadHeader();
+    if (uploadPageVisible()) uRebuildGrid();
+    return true;
+  }
+  function loadCachedUploads() {
+    try {
+      const c = JSON.parse(store.get(UP_KEY));
+      if (c && c.raw) { useUploadData(c.raw); uploadState.fetchedAt = c.t || 0; }
+    } catch (_) {}
+  }
+  let uploadsRefreshing = null;
+  function refreshUploads() {
+    if (uploadsRefreshing) return uploadsRefreshing;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), CFG.fetchTimeoutMs);
+    uploadsRefreshing = fetch(uploadsUrl(), { signal: ctl.signal })
+      .then((res) => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+      .then((raw) => {
+        const changed = useUploadData(raw);
+        uploadState.fetchedAt = Date.now();
+        store.set(UP_KEY, JSON.stringify({ t: uploadState.fetchedAt, raw }));
+        return changed;
+      })
+      .catch((err) => { console.error('[uploads] refresh failed:', err); throw err; })
+      .finally(() => { clearTimeout(timer); uploadsRefreshing = null; });
+    return uploadsRefreshing;
+  }
+  function ensureUploads() {
+    if (uploadState.loaded) {
+      uRebuildGrid();
+      renderUploadHeader();
+      if (Date.now() - uploadState.fetchedAt > 20000) refreshUploads().catch(() => {});
+      return;
+    }
+    showUploadState('loading');
+    refreshUploads().then(() => { if (!uploadState.loaded) showUploadState('error'); }).catch(() => { if (!uploadState.loaded) showUploadState('error'); });
+  }
+  $('#u-back').addEventListener('click', () => go('home'));
+  $('#u-retry').addEventListener('click', () => { showUploadState('loading'); refreshUploads().catch(() => showUploadState('error')); });
+  $('#u-refresh').addEventListener('click', () => {
+    const icon = $('#u-refresh .ic');
+    icon.style.animation = 'spin .6s linear';
+    refreshUploads().then((changed) => { toast(t(changed ? 'refreshed' : 'refreshed')); }).catch(() => toast(t('refreshFailed')));
+    setTimeout(() => { icon.style.animation = ''; }, 650);
+  });
+
+  /* ---- 下拉更新（觸控） ---- */
+  (function pullToRefresh() {
+    const wrap = $('#pull-wrap'), body = $('#pull-body'), indicator = $('#pull-indicator'), label = $('#pull-label'), spinner = $('#pull-spinner');
+    const THRESH = 62, MAX = 96;
+    let startY = 0, pulling = false, dragging = false, busyPull = false;
+    const scroller = () => document.scrollingElement || document.documentElement;
+    wrap.addEventListener('touchstart', (e) => {
+      if (busyPull || document.body.dataset.route !== 'upload' || scroller().scrollTop > 0 || e.touches.length !== 1) { pulling = false; return; }
+      startY = e.touches[0].clientY; pulling = true; dragging = false;
+    }, { passive: true });
+    wrap.addEventListener('touchmove', (e) => {
+      if (!pulling) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy <= 0) return;
+      dragging = true;
+      wrap.classList.add('dragging');
+      const dist = Math.min(MAX, dy * 0.5);
+      indicator.style.height = dist + 'px';
+      body.style.transform = 'translateY(' + dist + 'px)';
+      const armed = dist >= THRESH;
+      wrap.classList.toggle('armed', armed);
+      label.textContent = t(armed ? 'releaseToRefresh' : 'pullToRefresh');
+    }, { passive: true });
+    wrap.addEventListener('touchend', () => {
+      if (!pulling) return;
+      pulling = false;
+      wrap.classList.remove('dragging');
+      const armed = wrap.classList.contains('armed');
+      if (!dragging || !armed) { indicator.style.height = '0px'; body.style.transform = ''; wrap.classList.remove('armed'); return; }
+      busyPull = true;
+      wrap.classList.add('loading');
+      spinner.hidden = false;
+      indicator.style.height = '44px';
+      body.style.transform = 'translateY(44px)';
+      label.textContent = t('refreshing');
+      refreshUploads()
+        .then(() => toast(t('refreshed')))
+        .catch(() => toast(t('refreshFailed')))
+        .finally(() => {
+          spinner.hidden = true;
+          wrap.classList.remove('armed', 'loading');
+          indicator.style.height = '0px';
+          body.style.transform = '';
+          busyPull = false;
+        });
+    }, { passive: true });
+  })();
+
+  /* ---- 新增照片：選檔、驗證、上傳 ---- */
+  const UPLOAD_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(',').pop());
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+  }
+  async function uploadOne(file) {
+    if (file.size > CFG.uploadMaxBytes) return { ok: false, reason: 'big' };
+    if (UPLOAD_TYPES.indexOf(file.type) === -1) return { ok: false, reason: 'type' };
+    let data;
+    try { data = await fileToBase64(file); } catch (_) { return { ok: false, reason: 'net' }; }
+    try {
+      const res = await fetch(CFG.imagesSource, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // 刻意用 text/plain 避免瀏覽器送出 CORS 預檢（Apps Script 無法正確回應預檢）
+        body: JSON.stringify({ action: 'upload', filename: file.name, mimeType: file.type, data })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json || json.error === 'rate_limited') return { ok: false, reason: json && json.error === 'rate_limited' ? 'rate' : 'net' };
+      if (!json.ok) return { ok: false, reason: 'net' };
+      return { ok: true, item: normalize({ id: json.id, name: json.name || file.name }) };
+    } catch (_) {
+      return { ok: false, reason: 'net' };
+    }
+  }
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    let done = 0, okCount = 0, bigCount = 0, typeCount = 0, netCount = 0, rateHit = false;
+    const total = files.length;
+    showBusy(t('uploading', { done: 0, total }), 4);
+    for (const file of files) {
+      if (rateHit) break;
+      const r = await uploadOne(file);
+      done += 1;
+      showBusy(t('uploading', { done, total }), Math.max(4, (done / total) * 100));
+      if (r.ok) {
+        okCount += 1;
+        uploadState.images.unshift(r.item);                 // 樂觀更新：立刻出現在畫面最上方
+        uploadState.sig = signature(uploadState.images);
+        if (document.body.dataset.route === 'upload') { uRebuildGrid(); renderUploadHeader(); }
+      } else if (r.reason === 'big') { bigCount += 1; toast(t('uploadTooBig', { name: file.name }), 3000); }
+      else if (r.reason === 'type') { typeCount += 1; toast(t('uploadWrongType', { name: file.name }), 3000); }
+      else if (r.reason === 'rate') { rateHit = true; toast(t('uploadRateLimited'), 3500); }
+      else { netCount += 1; toast(t('uploadNetErr', { name: file.name }), 3000); }
+    }
+    hideBusy();
+    // 每個失敗的檔案在迴圈裡已經各自顯示過原因（太大/格式不符/網路錯誤），
+    // 這裡只在最後補一個成功摘要，避免兩個 toast 互相蓋掉、看不清楚發生了什麼事。
+    if (okCount) toast(tn('uploadOk', okCount));
+    if (okCount) { store.set(UP_KEY, JSON.stringify({ t: Date.now(), raw: { v: 2, images: uploadState.images.map((it) => ({ id: it.id, name: it.name })) } })); }
+  }
+  $('#u-add').addEventListener('click', () => $('#u-file').click());
+  $('#u-file').addEventListener('change', (e) => { handleFiles(e.target.files); e.target.value = ''; });
 
   /* ================= 語言下拉選單 ================= */
   const langSwitch = $('.lang-switch'), langToggle = $('#lang-toggle'), langMenu = $('#lang-menu');
@@ -1111,12 +1433,9 @@ body.selecting .toast{bottom:calc(92px + var(--safe-b))}
 
   /* ================= 其他事件 ================= */
   $('#btn-gallery').addEventListener('click', () => { tryFullscreen(); go('gallery'); });
-  $('#btn-soon').addEventListener('click', () => { tryFullscreen(); openModal(); });
-  $('#modal-ok').addEventListener('click', closeModal);
-  $('#modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
+  $('#btn-upload').addEventListener('click', () => { tryFullscreen(); go('upload'); });
 
   document.addEventListener('keydown', (e) => {
-    if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; }
     if (lbOpen) {
       if (e.key === 'Escape') closeLightbox();
       else if (e.key === 'ArrowLeft') stepLightbox(-1);
