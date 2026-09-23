@@ -1,4 +1,4 @@
-# Yuan Kuan & Cristine 婚禮相簿（Photo Gallery PWA）V1.2
+# V1.2
 
 掃 QR Code 直接開啟的唯讀喜帖式相簿。照片放在 Google 雲端硬碟，由 Google Apps Script 提供清單，網站本身是純靜態檔案，放在 GitHub Pages 即可。
 
