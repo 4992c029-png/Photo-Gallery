@@ -505,9 +505,9 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     chunkSize: 60,               // 相簿每批渲染幾張
     fetchTimeoutMs: 30000,
     uploadMaxBytes: 20 * 1024 * 1024,   // 訪客上傳單檔大小上限（20MB），須與 gas.txt 的 MAX_UPLOAD_BYTES 一致
-    uploadMaxDimension: 2400,           // 上傳前先縮圖，長邊最多這麼多 px；設 0 可關閉縮圖、永遠上傳原始檔
-    uploadJpegQuality: 0.85,            // 縮圖時的 JPEG 品質（0～1）
-    uploadTimeoutMs: 60000              // 單張上傳等待逾時的時間（毫秒）
+    uploadMaxDimension: 2000,           // 上傳前先縮圖，長邊最多這麼多 px；設 0 可關閉縮圖、永遠上傳原始檔
+    uploadJpegQuality: 0.82,            // 縮圖時的 JPEG 品質（0～1）
+    uploadTimeoutMs: 90000              // 單張上傳等待逾時的時間（毫秒）
   }, window.APP_CONFIG || {});
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -1278,13 +1278,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   const uGrid = $('#u-grid'), uSentinel = $('#u-sentinel');
   let uRendered = 0, uIo = null, uImgIO = null, uCurThumbPx = 400;
 
-  // 每次讀取訪客照片都帶一次性 query，避免瀏覽器 / Service Worker / 中間快取
-  // 把剛上傳的新照片暫時藏住。Apps Script 自己仍會使用 20 秒的伺服器快取，
-  // 但 doPost() 成功後會主動清掉該快取。
-  const uploadsUrl = () => {
-    const base = CFG.imagesSource + (CFG.imagesSource.indexOf('?') === -1 ? '?' : '&') + 'action=uploads';
-    return base + '&_ts=' + Date.now();
-  };
+  const uploadsUrl = () => CFG.imagesSource + (CFG.imagesSource.indexOf('?') === -1 ? '?' : '&') + 'action=uploads&_=' + Date.now();
 
   function showUploadState(name) {
     ['loading', 'error', 'empty'].forEach((n) => { $('#u-' + n).hidden = n !== name; });
@@ -1379,7 +1373,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     if (uploadsRefreshing) return uploadsRefreshing;
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), CFG.fetchTimeoutMs);
-    uploadsRefreshing = fetch(uploadsUrl(), { signal: ctl.signal })
+    uploadsRefreshing = fetch(uploadsUrl(), { signal: ctl.signal, cache: 'no-store' })
       .then((res) => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
       .then((raw) => {
         const changed = useUploadData(raw);
@@ -1505,23 +1499,75 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     too_big: 'big', bad_type: 'type', rate_limited: 'rate',
     bad_action: 'net', no_data: 'net', bad_data: 'net', server_error: 'net'
   };
+
+  /*
+   * 上傳採用「原生 HTML Form -> 隱藏 iframe」而不是跨來源 fetch POST。
+   * GitHub Pages 與 Apps Script 不同來源時，fetch 可能被 redirect/CORS 卡住；
+   * 原生表單送出不需要讀取跨來源 response，所以不會因 CORS 而取消真正的 POST。
+   * Apps Script 端會從 e.parameter 取得 action / filename / mimeType / data。
+   */
+  let uploadFrameSeq = 0;
+  function submitUploadForm_(filename, mimeType, data) {
+    return new Promise((resolve) => {
+      const seq = (++uploadFrameSeq) + '-' + Date.now();
+      const frameName = '__upload_frame_' + seq.replace(/[^a-zA-Z0-9_]/g, '_');
+      const iframe = document.createElement('iframe');
+      iframe.name = frameName;
+      iframe.title = 'upload transport';
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.style.cssText = 'position:fixed;width:1px;height:1px;border:0;opacity:0;pointer-events:none;left:-10px;top:-10px;';
+
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = CFG.imagesSource;
+      form.target = frameName;
+      form.enctype = 'application/x-www-form-urlencoded';
+      form.encoding = 'application/x-www-form-urlencoded';
+      form.style.display = 'none';
+
+      const add = (name, value) => {
+        const input = document.createElement('input');
+        input.type = 'hidden'; input.name = name; input.value = value;
+        form.appendChild(input);
+      };
+      add('action', 'upload');
+      add('filename', filename);
+      add('mimeType', mimeType);
+      add('data', data);
+
+      let settled = false;
+      const finish = (ok) => {
+        if (settled) return;
+        settled = true;
+        setTimeout(() => { try { form.remove(); iframe.remove(); } catch (_) {} }, 1000);
+        resolve(ok);
+      };
+
+      /* iframe load 只代表瀏覽器完成了導覽，不直接把它當成上傳成功；
+         真正成功與否仍由後面的 GET ?action=uploads 驗證。 */
+      iframe.addEventListener('error', () => finish(false), { once: true });
+      document.body.appendChild(iframe);
+      document.body.appendChild(form);
+
+      try {
+        form.submit();
+        /* 原生 form.submit() 沒有可讀取的 Promise；送出動作一旦交給瀏覽器，
+           就立刻回傳，避免再等待跨來源 response。 */
+        setTimeout(() => finish(true), 120);
+      } catch (err) {
+        console.warn('[upload] native form submit failed:', err);
+        finish(false);
+      }
+    });
+  }
+
   function waitForUploadedFile_(expectedName, timeoutMs) {
-    /*
-     * 重要：這裡只透過 GET 確認檔案是否真的進到 Drive。
-     * POST 本身不能 await，也不能讀取 response：GitHub Pages 與 Apps Script 不同來源，
-     * ContentService 的回應會經過 script.googleusercontent.com 的重新導向，瀏覽器可能
-     * 因 CORS 而無法把 response 交給 fetch，即使伺服器其實已經成功建立檔案。
-     * 因此「POST 已送出」與「POST response 可讀」完全拆開處理。
-     */
     const started = Date.now();
-    const intervals = [300, 700, 1200, 1800, 2500, 3500, 5000, 6000, 8000, 10000, 12000];
-    let attempt = 0;
+    const intervals = [300, 600, 1000, 1500, 2200, 3000, 4000, 5000, 6000, 7000];
 
     function findUploadedFile_() {
-      const suffix = '_' + expectedName;
-      return uploadState.images.find((it) => it.name === expectedName || it.name.endsWith(suffix)) || null;
+      return uploadState.images.find((it) => it.name === expectedName || it.name.endsWith('_' + expectedName)) || null;
     }
-
     function poll() {
       if (Date.now() - started > timeoutMs) return Promise.resolve(null);
       return refreshUploads()
@@ -1531,12 +1577,12 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
           const wait = intervals[Math.min(attempt++, intervals.length - 1)];
           return new Promise((resolve) => setTimeout(() => resolve(poll()), wait));
         })
-        .catch((err) => {
-          console.warn('[uploads] verification GET failed:', err);
+        .catch(() => {
           const wait = intervals[Math.min(attempt++, intervals.length - 1)];
           return new Promise((resolve) => setTimeout(() => resolve(poll()), wait));
         });
     }
+    let attempt = 0;
     return poll();
   }
 
@@ -1552,58 +1598,29 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     try { data = await fileToBase64(resized); }
     catch (_) { return { ok: false, reason: 'net' }; }
 
-    // 短 token 放進檔名，方便在沒有可讀 POST response 的情況下，
-    // 由 GET ?action=uploads 精準找到「這一次」建立的檔案。
+    /* token 放進檔名，讓後續 GET 可以精準確認是不是這一次上傳的檔案。 */
     const dot = originalUploadName.lastIndexOf('.');
-    const token = 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const token = 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     const uploadName = dot > 0
       ? originalUploadName.slice(0, dot) + '__' + token + originalUploadName.slice(dot)
       : originalUploadName + '__' + token;
 
-    const payload = JSON.stringify({
-      action: 'upload',
-      filename: uploadName,
-      mimeType: uploadType,
-      data: data
-    });
-
-    /*
-     * 不再 await 這個 fetch。
-     * mode=no-cors 會讓瀏覽器送出 simple POST，但 response 是 opaque，
-     * 所以「等待 fetch 完成」沒有判斷價值，反而容易被 Apps Script 的跨來源回應卡住。
-     * 送出後立即進入 GET 輪詢；只要 Drive 中出現帶有 uploadName 的檔案，就判定成功。
-     */
-    let postRejected = false;
+    let dispatched = false;
     try {
-      fetch(CFG.imagesSource, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: payload,
-        cache: 'no-store'
-      }).catch((err) => {
-        postRejected = true;
-        console.warn('[upload] POST network error (verification will continue):', err);
-      });
-    } catch (err) {
-      postRejected = true;
-      console.warn('[upload] POST dispatch failed:', err);
-    }
+      dispatched = await submitUploadForm_(uploadName, uploadType, data);
+    } catch (_) {}
 
-    // POST 已經交給瀏覽器後，不再等待 response；改由可正常讀取的 GET 清單確認結果。
-    const item = await waitForUploadedFile_(uploadName, Math.max(20000, Math.min(CFG.uploadTimeoutMs, 60000)));
+    /* POST 已交給瀏覽器後，不等待 response；只用 GET 驗證 Drive 是否真的出現檔案。 */
+    const item = await waitForUploadedFile_(uploadName, Math.max(30000, Math.min(CFG.uploadTimeoutMs, 90000)));
     if (item) return { ok: true, item: normalize(item) };
 
-    // 最後再給一次短暫緩衝，避免剛好卡在 GAS 建檔 / Drive 清單更新的邊界。
-    await new Promise((r) => setTimeout(r, 1500));
     try {
       await refreshUploads();
-      const suffix = '_' + uploadName;
-      const finalItem = uploadState.images.find((it) => it.name === uploadName || it.name.endsWith(suffix));
+      const finalItem = uploadState.images.find((it) => it.name === uploadName || it.name.endsWith('_' + uploadName));
       if (finalItem) return { ok: true, item: normalize(finalItem) };
     } catch (_) {}
 
-    return { ok: false, reason: postRejected ? 'net' : 'timeout' };
+    return { ok: false, reason: dispatched ? 'timeout' : 'net' };
   }
   async function handleFiles(fileList) {
     const files = Array.from(fileList || []);
