@@ -304,6 +304,15 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
 }
+
+/* ========== 頁面內嵌訪客上傳 ========== */
+.upload-inline{padding:8px max(12px,var(--safe-r)) calc(90px + var(--safe-b)) max(12px,var(--safe-l))}
+.upload-inline-card{width:100%;max-width:760px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 14px 35px rgba(0,0,0,.2)}
+.upload-inline-title{padding:14px 16px 6px;font-family:var(--font-display);font-size:22px;font-weight:600}
+.upload-inline-note{margin:0;padding:0 16px 12px;color:var(--muted);font-size:13px;line-height:1.55}
+.upload-inline-frame{display:block;width:100%;height:540px;border:0;background:var(--surface)}
+@media (max-width:640px){.upload-inline{padding-left:8px;padding-right:8px}.upload-inline-card{border-radius:14px}.upload-inline-frame{height:590px}}
+
 </style>
 </head>
 
@@ -430,8 +439,13 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     </div>
   </div>
 
-  <input type="file" id="u-file" accept="image/*" multiple hidden>
-  <button class="fab" id="u-add"><svg class="ic"><use href="#i-plus"/></svg><span data-i18n="addPhotos"></span></button>
+  <div class="upload-inline">
+    <div class="upload-inline-card">
+      <div class="upload-inline-title" data-i18n="addPhotos"></div>
+      <p class="upload-inline-note" data-i18n="uploadInlineHint"></p>
+      <iframe class="upload-inline-frame" id="upload-frame" title="訪客照片上傳" loading="eager"></iframe>
+    </div>
+  </div>
 </section>
 
 <!-- 底部下載欄 -->
@@ -566,6 +580,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
       uploadEmpty: '還沒有人上傳照片，當第一個分享的人吧！',
       uploadLoadFailed: '無法載入照片，請檢查網路後再試一次。',
       addPhotos: '新增照片',
+      uploadInlineHint: '可一次選擇多張照片，系統會依順序逐張上傳；大於約 2MB 的一般照片會先在手機端自動縮小，以節省 Google 儲存空間。',
       pullToRefresh: '下拉以更新',
       releaseToRefresh: '放開以更新',
       refreshing: '更新中…',
@@ -629,6 +644,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
       uploadEmpty: 'No photos yet \u2014 be the first to share one!',
       uploadLoadFailed: 'Couldn\u2019t load photos. Check your connection and try again.',
       addPhotos: 'Add Photos',
+      uploadInlineHint: 'Select multiple photos at once. They are uploaded one by one; larger photos are compressed on the phone first to save Google storage.',
       pullToRefresh: 'Pull to refresh',
       releaseToRefresh: 'Release to refresh',
       refreshing: 'Refreshing\u2026',
@@ -1278,7 +1294,13 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   const uGrid = $('#u-grid'), uSentinel = $('#u-sentinel');
   let uRendered = 0, uIo = null, uImgIO = null, uCurThumbPx = 400;
 
-  const uploadsUrl = () => CFG.imagesSource + (CFG.imagesSource.indexOf('?') === -1 ? '?' : '&') + 'action=uploads';
+  // 每次讀取訪客照片都帶一次性 query，避免瀏覽器 / Service Worker / 中間快取
+  // 把剛上傳的新照片暫時藏住。Apps Script 自己仍會使用 20 秒的伺服器快取，
+  // 但 doPost() 成功後會主動清掉該快取。
+  const uploadsUrl = () => {
+    const base = CFG.imagesSource + (CFG.imagesSource.indexOf('?') === -1 ? '?' : '&') + 'action=uploads';
+    return base + '&_ts=' + Date.now();
+  };
 
   function showUploadState(name) {
     ['loading', 'error', 'empty'].forEach((n) => { $('#u-' + n).hidden = n !== name; });
@@ -1386,6 +1408,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     return uploadsRefreshing;
   }
   function ensureUploads() {
+    ensureUploaderFrame();
     if (uploadState.loaded) {
       uRebuildGrid();
       renderUploadHeader();
@@ -1452,113 +1475,95 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     }, { passive: true });
   })();
 
-  /* ---- 新增照片：選檔、驗證、上傳 ---- */
-  const UPLOAD_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
-  function fileToBase64(blob) {
-    return new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result).split(',').pop());
-      r.onerror = () => reject(r.error);
-      r.readAsDataURL(blob);
-    });
-  }
-  /* 上傳前先在手機上把照片縮小、重新壓縮：手機相機拍出來的原始照片常常有好幾 MB，
-     轉成 Base64 文字後體積還會再膨脹約三分之一，在行動網路下很容易上傳到一半逾時或中斷
-     ——這通常才是「上傳失敗」的真正原因，不是 Google 刻意擋下特定大小。
-     任何一步失敗（例如瀏覽器無法解碼這個格式）就直接放棄縮圖，改用原始檔案，不讓上傳整個失敗。 */
-  function resizeForUpload(file) {
-    return new Promise((resolve) => {
-      const maxDim = CFG.uploadMaxDimension;
-      if (!maxDim) { resolve(file); return; }   // maxDim 設為 0 可以整個關閉縮圖，永遠上傳原始檔
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      const done = (blob) => { URL.revokeObjectURL(url); resolve(blob || file); };
-      img.onload = () => {
-        const w = img.naturalWidth, h = img.naturalHeight;
-        if (!w || !h || Math.max(w, h) <= maxDim) { done(file); return; }   // 已經夠小，不需要重新壓縮
-        const scale = maxDim / Math.max(w, h);
-        const cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = cw; canvas.height = ch;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, cw, ch);
-          canvas.toBlob((blob) => done(blob), 'image/jpeg', CFG.uploadJpegQuality);
-        } catch (_) { done(file); }
-      };
-      img.onerror = () => done(file);   // 瀏覽器解不出這個格式（部分瀏覽器不支援 HEIC 等），直接用原始檔
-      img.src = url;
-    });
-  }
-  function resizedName(originalName, resizedBlob, originalType) {
-    if (resizedBlob.type === originalType || resizedBlob.type !== 'image/jpeg') return originalName;
-    const dot = originalName.lastIndexOf('.');
-    return (dot > 0 ? originalName.slice(0, dot) : originalName) + '.jpg';   // 重新編碼成 JPEG 時，副檔名要跟著換
-  }
-  const UPLOAD_ERROR_REASON = {
-    too_big: 'big', bad_type: 'type', rate_limited: 'rate',
-    bad_action: 'net', no_data: 'net', bad_data: 'net', server_error: 'net'
-  };
-  async function uploadOne(file) {
-    if (UPLOAD_TYPES.indexOf(file.type) === -1) return { ok: false, reason: 'type' };
+  /* ---- 頁面內嵌新增照片：Apps Script HTML Service + google.script.run ---- */
+  /*
+   * 上傳 UI 現在直接嵌在「訪客照片」頁，不再彈出額外視窗。
+   * 實際檔案仍由 GAS HTML Service 取得 Blob，再由 processUpload() 寫入 Drive。
+   * child frame 會一次選多張、在瀏覽器端依序處理；parent 只接收每張成功/失敗事件。
+   */
+  const uploadFrame = $('#upload-frame');
+  let uploadFrameLang = '';
+  let uploadFrameLoaded = false;
 
-    const resized = await resizeForUpload(file);
-    const uploadName = resizedName(file.name, resized, file.type);
-    const uploadType = resized.type || file.type;
-    if (resized.size > CFG.uploadMaxBytes) return { ok: false, reason: 'big' };   // 縮圖後仍然太大，才真的拒絕
+  function ensureUploaderFrame() {
+    const lang = (state.lang || fallbackLang) === 'en' ? 'en' : 'zh';
+    if (uploadFrameLoaded && uploadFrameLang === lang) return;
+    const sep = CFG.imagesSource.indexOf('?') === -1 ? '?' : '&';
+    uploadFrameLang = lang;
+    uploadFrameLoaded = false;
+    uploadFrame.src = CFG.imagesSource + sep + 'action=uploader&lang=' + encodeURIComponent(lang) + '&embedded=1&_ts=' + Date.now();
+  }
+  uploadFrame.addEventListener('load', () => { uploadFrameLoaded = true; });
 
-    let data;
-    try { data = await fileToBase64(resized); } catch (_) { return { ok: false, reason: 'net' }; }
+  window.addEventListener('message', (event) => {
+    if (event.source !== uploadFrame.contentWindow) return;
+    const d = event.data || {};
+    if (d.source !== 'photo-gallery-gas-upload') return;
 
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), CFG.uploadTimeoutMs);
-    try {
-      const res = await fetch(CFG.imagesSource, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // 刻意用 text/plain 避免瀏覽器送出 CORS 預檢（Apps Script 無法正確回應預檢）
-        body: JSON.stringify({ action: 'upload', filename: uploadName, mimeType: uploadType, data }),
-        signal: ctl.signal
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json) return { ok: false, reason: 'net' };
-      if (!json.ok) return { ok: false, reason: UPLOAD_ERROR_REASON[json.error] || 'net' };
-      return { ok: true, item: normalize({ id: json.id, name: json.name || uploadName }) };
-    } catch (err) {
-      return { ok: false, reason: err && err.name === 'AbortError' ? 'timeout' : 'net' };
-    } finally {
-      clearTimeout(timer);
+    if (d.type === 'upload-batch-start') {
+      toast((state.lang || fallbackLang) === 'en'
+        ? `Uploading ${d.total || 0} photos in order…`
+        : `開始依序上傳 ${d.total || 0} 張照片…`, 3000);
+      return;
     }
-  }
-  async function handleFiles(fileList) {
-    const files = Array.from(fileList || []);
-    if (!files.length) return;
-    let done = 0, okCount = 0, failCount = 0, rateHit = false;
-    const total = files.length;
-    showBusy(t('uploading', { done: 0, total }), 4);
-    for (const file of files) {
-      if (rateHit) break;
-      const r = await uploadOne(file);
-      done += 1;
-      showBusy(t('uploading', { done, total }), Math.max(4, (done / total) * 100));
-      if (r.ok) {
-        okCount += 1;
-        uploadState.images.unshift(r.item);                 // 樂觀更新：立刻出現在畫面最上方
-        uploadState.sig = signature(uploadState.images);
-        if (document.body.dataset.route === 'upload') { uRebuildGrid(); renderUploadHeader(); }
-      } else if (r.reason === 'big') { failCount += 1; toast(t('uploadTooBig', { name: file.name }), 3000); }
-      else if (r.reason === 'type') { failCount += 1; toast(t('uploadWrongType', { name: file.name }), 3000); }
-      else if (r.reason === 'rate') { rateHit = true; toast(t('uploadRateLimited'), 3500); }
-      else if (r.reason === 'timeout') { failCount += 1; toast(t('uploadTimeout', { name: file.name }), 3500); }
-      else { failCount += 1; toast(t('uploadNetErr', { name: file.name }), 3000); }
+
+    if (d.type === 'upload-progress') {
+      const total = Number(d.total || 0), done = Number(d.done || 0);
+      toast((state.lang || fallbackLang) === 'en'
+        ? `Uploading… ${done} / ${total}`
+        : `正在上傳… ${done} / ${total}`, 1800);
+      return;
     }
-    hideBusy();
-    // 每個失敗的檔案在迴圈裡已經各自顯示過原因（太大/格式不符/逾時/網路錯誤），
-    // 這裡只在最後補一個成功摘要，避免兩個 toast 互相蓋掉、看不清楚發生了什麼事。
-    if (okCount) toast(tn('uploadOk', okCount));
-    if (okCount) { store.set(UP_KEY, JSON.stringify({ t: Date.now(), raw: { v: 2, images: uploadState.images.map((it) => ({ id: it.id, name: it.name })) } })); }
-  }
-  $('#u-add').addEventListener('click', () => $('#u-file').click());
-  $('#u-file').addEventListener('change', (e) => { handleFiles(e.target.files); e.target.value = ''; });
+
+    if (d.type === 'upload-result') {
+      if (!d.ok) {
+        const reason = d.error || 'server_error';
+        const map = {
+          bad_type: '檔案格式不支援',
+          too_big: '照片超過 20MB',
+          no_file: '沒有選擇照片',
+          rate_limited: '目前上傳人數較多，請稍後再試',
+          no_folder: '伺服器上傳資料夾設定錯誤',
+          storage_full: 'Google 儲存空間不足，已停止後續上傳',
+          storage_low: 'Google 可用空間不足，已停止後續上傳',
+          auth: 'Google Drive 授權或寫入權限發生問題',
+          server_error: '伺服器處理失敗，請查看 Apps Script 執行記錄'
+        };
+        toast((d.name ? d.name + '：' : '') + (map[reason] || ('上傳失敗：' + reason)), 4500);
+
+        if (d.storageStop) {
+          // 儲存空間不足時由 child 自己停止整批，避免一直重試浪費流量。
+          return;
+        }
+        return;
+      }
+
+      if (d.id && d.name) {
+        const item = normalize({ id: d.id, name: d.name });
+        if (item) {
+          uploadState.images = [item].concat(uploadState.images.filter((it) => it.id !== item.id));
+          uploadState.loaded = true;
+          uploadState.fetchedAt = Date.now();
+          uploadState.sig = signature(uploadState.images);
+          uRebuildGrid();
+          renderUploadHeader();
+        }
+      }
+      return;
+    }
+
+    if (d.type === 'upload-batch-done') {
+      const total = Number(d.total || 0), ok = Number(d.okCount || 0), fail = Number(d.failCount || 0);
+      const key = ok === 1 ? 'uploadOkOne' : 'uploadOk';
+      const msg = fail
+        ? ((state.lang || fallbackLang) === 'en'
+            ? `${ok} uploaded, ${fail} failed`
+            : `完成：${ok} 張成功，${fail} 張失敗`)
+        : t(key, { n: ok });
+      toast(msg, 3500);
+      refreshUploads().catch(() => {});
+    }
+  });
 
   /* ================= 語言下拉選單 ================= */
   const langSwitch = $('.lang-switch'), langToggle = $('#lang-toggle'), langMenu = $('#lang-menu');
