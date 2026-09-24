@@ -305,13 +305,16 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
 }
 
-/* ========== 頁面內嵌訪客上傳 ========== */
+/* ========== 訪客上傳入口：避免在 GitHub 頁面內嵌 GAS iframe ========== */
 .upload-inline{padding:8px max(12px,var(--safe-r)) calc(90px + var(--safe-b)) max(12px,var(--safe-l))}
 .upload-inline-card{width:100%;max-width:760px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 14px 35px rgba(0,0,0,.2)}
-.upload-inline-title{padding:14px 16px 6px;font-family:var(--font-display);font-size:22px;font-weight:600}
-.upload-inline-note{margin:0;padding:0 16px 12px;color:var(--muted);font-size:13px;line-height:1.55}
-.upload-inline-frame{display:block;width:100%;height:540px;border:0;background:var(--surface)}
-@media (max-width:640px){.upload-inline{padding-left:8px;padding-right:8px}.upload-inline-card{border-radius:14px}.upload-inline-frame{height:590px}}
+.upload-inline-title{padding:16px 16px 6px;font-family:var(--font-display);font-size:22px;font-weight:600}
+.upload-inline-note{margin:0;padding:0 16px 16px;color:var(--muted);font-size:13px;line-height:1.6}
+.upload-direct-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:calc(100% - 32px);margin:0 16px 18px;min-height:58px;border:0;border-radius:15px;background:var(--btn);color:var(--btn-ink);font-family:var(--font-display);font-size:18px;font-weight:600;cursor:pointer;box-shadow:0 8px 18px rgba(60,66,48,.22)}
+.upload-direct-btn:active{transform:scale(.985)}
+.upload-direct-btn .ic{width:22px;height:22px}
+.upload-direct-hint{margin:0 16px 18px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.05);color:var(--muted);font-size:12.5px;line-height:1.55;text-align:center}
+@media (max-width:640px){.upload-inline{padding-left:8px;padding-right:8px}.upload-inline-card{border-radius:14px}.upload-direct-btn{width:calc(100% - 20px);margin-left:10px;margin-right:10px}.upload-direct-hint{margin-left:10px;margin-right:10px}}
 
 </style>
 </head>
@@ -443,7 +446,11 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     <div class="upload-inline-card">
       <div class="upload-inline-title" data-i18n="addPhotos"></div>
       <p class="upload-inline-note" data-i18n="uploadInlineHint"></p>
-      <iframe class="upload-inline-frame" id="upload-frame" title="訪客照片上傳" loading="eager"></iframe>
+      <button class="upload-direct-btn" id="u-open-uploader" type="button">
+        <svg class="ic"><use href="#i-cloud-up"/></svg>
+        <span data-i18n="startUpload"></span>
+      </button>
+      <p class="upload-direct-hint" data-i18n="uploadDirectHint"></p>
     </div>
   </div>
 </section>
@@ -501,7 +508,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <!-- 站台設定（圖片來源等） -->
-<script src="config.js?v=20260924-2"></script>
+<script src="config.js"></script>
 
 <script>
 (function () {
@@ -580,7 +587,9 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
       uploadEmpty: '還沒有人上傳照片，當第一個分享的人吧！',
       uploadLoadFailed: '無法載入照片，請檢查網路後再試一次。',
       addPhotos: '新增照片',
-      uploadInlineHint: '可一次選擇多張照片，系統會依順序逐張上傳；大於約 2MB 的一般照片會先在手機端自動縮小，以節省 Google 儲存空間。',
+      uploadInlineHint: '可一次選擇多張照片，系統會依順序逐張上傳；大於約 2MB 的一般照片會先在手機端自動縮小，以節省 Google 儲存空間。上傳頁會在目前分頁開啟，不會另外跳出視窗。',
+      startUpload: '開始上傳照片',
+      uploadDirectHint: '點擊後會在目前分頁開啟 Google Apps Script 上傳頁；上傳完成後按瀏覽器返回鍵即可回到相簿。',
       pullToRefresh: '下拉以更新',
       releaseToRefresh: '放開以更新',
       refreshing: '更新中…',
@@ -644,7 +653,9 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
       uploadEmpty: 'No photos yet \u2014 be the first to share one!',
       uploadLoadFailed: 'Couldn\u2019t load photos. Check your connection and try again.',
       addPhotos: 'Add Photos',
-      uploadInlineHint: 'Select multiple photos at once. They are uploaded one by one; larger photos are compressed on the phone first to save Google storage.',
+      uploadInlineHint: 'Select multiple photos at once. They are uploaded one by one; larger photos are compressed on the phone first to save Google storage. The uploader opens in this tab, not a popup.',
+      startUpload: 'Start uploading photos',
+      uploadDirectHint: 'The Google Apps Script uploader opens in this tab. After uploading, use the browser Back button to return to the gallery.',
       pullToRefresh: 'Pull to refresh',
       releaseToRefresh: 'Release to refresh',
       refreshing: 'Refreshing\u2026',
@@ -1408,7 +1419,6 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     return uploadsRefreshing;
   }
   function ensureUploads() {
-    ensureUploaderFrame();
     if (uploadState.loaded) {
       uRebuildGrid();
       renderUploadHeader();
@@ -1475,95 +1485,27 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     }, { passive: true });
   })();
 
-  /* ---- 頁面內嵌新增照片：Apps Script HTML Service + google.script.run ---- */
+  /* ---- 上傳入口：直接在同一個分頁開啟 B 帳號的 Apps Script uploader ---- */
   /*
-   * 上傳 UI 現在直接嵌在「訪客照片」頁，不再彈出額外視窗。
-   * 實際檔案仍由 GAS HTML Service 取得 Blob，再由 processUpload() 寫入 Drive。
-   * child frame 會一次選多張、在瀏覽器端依序處理；parent 只接收每張成功/失敗事件。
+   * 不再把 Apps Script HTML Service 放進 GitHub Pages 的 iframe。
+   * 手機瀏覽器對跨網站 iframe 可能受到登入狀態、第三方 Cookie 或重新導向限制，
+   * 造成 iframe 內顯示 Google 雲端硬碟「無法開啟這個檔案」。
+   * 改成同一個分頁直接開 B 的 /exec?action=uploader，讓 uploader 成為頂層頁面，
+   * google.script.run 就能直接取得檔案 Blob 並寫入 B 的 Drive。
+   * 不會開新視窗，也不需要另外的 iframe；使用手機瀏覽器返回鍵即可回到相簿。
    */
-  const uploadFrame = $('#upload-frame');
-  let uploadFrameLang = '';
-  let uploadFrameLoaded = false;
-
-  function ensureUploaderFrame() {
+  function openDirectUploader() {
     const lang = (state.lang || fallbackLang) === 'en' ? 'en' : 'zh';
-    if (uploadFrameLoaded && uploadFrameLang === lang) return;
-    const sep = CFG.imagesSource.indexOf('?') === -1 ? '?' : '&';
-    uploadFrameLang = lang;
-    uploadFrameLoaded = false;
-    uploadFrame.src = CFG.imagesSource + sep + 'action=uploader&lang=' + encodeURIComponent(lang) + '&embedded=1&_ts=' + Date.now();
+    const base = String(CFG.imagesSource || '').trim();
+    if (!base || base === 'images.json') {
+      toast('尚未設定 Google Apps Script 上傳網址', 4500);
+      return;
+    }
+    const sep = base.indexOf('?') === -1 ? '?' : '&';
+    const url = base + sep + 'action=uploader&lang=' + encodeURIComponent(lang) + '&_ts=' + Date.now();
+    window.location.href = url;
   }
-  uploadFrame.addEventListener('load', () => { uploadFrameLoaded = true; });
-
-  window.addEventListener('message', (event) => {
-    if (event.source !== uploadFrame.contentWindow) return;
-    const d = event.data || {};
-    if (d.source !== 'photo-gallery-gas-upload') return;
-
-    if (d.type === 'upload-batch-start') {
-      toast((state.lang || fallbackLang) === 'en'
-        ? `Uploading ${d.total || 0} photos in order…`
-        : `開始依序上傳 ${d.total || 0} 張照片…`, 3000);
-      return;
-    }
-
-    if (d.type === 'upload-progress') {
-      const total = Number(d.total || 0), done = Number(d.done || 0);
-      toast((state.lang || fallbackLang) === 'en'
-        ? `Uploading… ${done} / ${total}`
-        : `正在上傳… ${done} / ${total}`, 1800);
-      return;
-    }
-
-    if (d.type === 'upload-result') {
-      if (!d.ok) {
-        const reason = d.error || 'server_error';
-        const map = {
-          bad_type: '檔案格式不支援',
-          too_big: '照片超過 20MB',
-          no_file: '沒有選擇照片',
-          rate_limited: '目前上傳人數較多，請稍後再試',
-          no_folder: '伺服器上傳資料夾設定錯誤',
-          storage_full: 'Google 儲存空間不足，已停止後續上傳',
-          storage_low: 'Google 可用空間不足，已停止後續上傳',
-          auth: 'Google Drive 授權或寫入權限發生問題',
-          server_error: '伺服器處理失敗，請查看 Apps Script 執行記錄'
-        };
-        toast((d.name ? d.name + '：' : '') + (map[reason] || ('上傳失敗：' + reason)), 4500);
-
-        if (d.storageStop) {
-          // 儲存空間不足時由 child 自己停止整批，避免一直重試浪費流量。
-          return;
-        }
-        return;
-      }
-
-      if (d.id && d.name) {
-        const item = normalize({ id: d.id, name: d.name });
-        if (item) {
-          uploadState.images = [item].concat(uploadState.images.filter((it) => it.id !== item.id));
-          uploadState.loaded = true;
-          uploadState.fetchedAt = Date.now();
-          uploadState.sig = signature(uploadState.images);
-          uRebuildGrid();
-          renderUploadHeader();
-        }
-      }
-      return;
-    }
-
-    if (d.type === 'upload-batch-done') {
-      const total = Number(d.total || 0), ok = Number(d.okCount || 0), fail = Number(d.failCount || 0);
-      const key = ok === 1 ? 'uploadOkOne' : 'uploadOk';
-      const msg = fail
-        ? ((state.lang || fallbackLang) === 'en'
-            ? `${ok} uploaded, ${fail} failed`
-            : `完成：${ok} 張成功，${fail} 張失敗`)
-        : t(key, { n: ok });
-      toast(msg, 3500);
-      refreshUploads().catch(() => {});
-    }
-  });
+  $('#u-open-uploader').addEventListener('click', openDirectUploader);
 
   /* ================= 語言下拉選單 ================= */
   const langSwitch = $('.lang-switch'), langToggle = $('#lang-toggle'), langMenu = $('#lang-menu');
@@ -1613,15 +1555,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   });
 
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js?v=20260924-2', {updateViaCache: 'none'}).then((reg) => { try { reg.update(); } catch (_) {} }).catch(() => {}); });
-  }
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!sessionStorage.getItem('sw-reloaded-20260924-2')) {
-        sessionStorage.setItem('sw-reloaded-20260924-2', '1');
-        location.reload();
-      }
-    });
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
   }
 })();
 </script>
