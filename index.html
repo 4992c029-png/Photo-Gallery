@@ -244,6 +244,21 @@ body{background:#3a4032}   /* 桌面版卡片外的環境色，取自照片的�
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .btn .ic{width:19px;height:19px}
 
+.dl-switch{position:relative}
+.dl-menu{
+  position:absolute;right:0;bottom:calc(100% + 10px);z-index:3;width:max(240px,min(84vw,300px));margin:0;padding:6px;list-style:none;
+  border-radius:14px;border:1px solid var(--line);background:rgba(28,30,33,.96);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
+  box-shadow:0 14px 30px rgba(0,0,0,.4);
+}
+.dl-menu li{
+  display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:10px;cursor:pointer;white-space:nowrap;
+}
+.dl-menu li .ic{width:19px;height:19px;flex:none;color:var(--accent)}
+.dl-menu li span{display:flex;flex-direction:column;gap:1px;min-width:0}
+.dl-menu li b{font-size:14.5px;font-weight:650}
+.dl-menu li small{font-size:12px;color:var(--muted);font-weight:400;white-space:normal}
+@media (hover:hover){.dl-menu li:hover{background:rgba(255,255,255,.08)}}
+
 /* ========== Lightbox ========== */
 .lightbox{position:fixed;inset:0;z-index:50;background:#050607;animation:fade .2s ease}
 .lb-top{
@@ -307,6 +322,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   <symbol id="i-cloud-up" viewBox="0 0 24 24"><path d="M7.5 18a4.5 4.5 0 0 1-.6-8.96 5.5 5.5 0 0 1 10.7-1.7A4.25 4.25 0 0 1 17 18H7.5z"/><path d="M12 15.2V9.8M9.3 12.4L12 9.7l2.7 2.7"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-zip" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M12 3v3M12 8v2M12 12v2M12 16v2"/></symbol>
 </svg>
 
 <noscript><p style="padding:24px">This page needs JavaScript. 請開啟 JavaScript。</p></noscript>
@@ -422,7 +438,21 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
 <div class="selbar" id="selbar" aria-hidden="true">
   <div class="count" id="sel-count"></div>
   <button class="btn ghost" id="sel-cancel" data-i18n="cancel"></button>
-  <button class="btn primary" id="sel-download"><svg class="ic"><use href="#i-download"/></svg><span data-i18n="downloadSelected"></span></button>
+  <div class="dl-switch" id="dl-switch">
+    <button class="btn primary" id="sel-download" aria-haspopup="listbox" aria-expanded="false" aria-controls="dl-menu">
+      <svg class="ic"><use href="#i-download"/></svg><span data-i18n="download"></span>
+    </button>
+    <ul class="dl-menu" id="dl-menu" role="listbox" hidden>
+      <li role="option" id="dl-zip">
+        <svg class="ic"><use href="#i-zip"/></svg>
+        <span><b data-i18n="downloadAsZip"></b><small data-i18n="downloadAsZipHint"></small></span>
+      </li>
+      <li role="option" id="dl-individual">
+        <svg class="ic"><use href="#i-image"/></svg>
+        <span><b data-i18n="downloadIndividually"></b><small data-i18n="downloadIndividuallyHint"></small></span>
+      </li>
+    </ul>
+  </div>
 </div>
 
 <!-- 燈箱 -->
@@ -474,7 +504,10 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     downloadPx: 0,               // 0 = 原始大小；也可填 2048 之類，縮小 zip 體積
     chunkSize: 60,               // 相簿每批渲染幾張
     fetchTimeoutMs: 30000,
-    uploadMaxBytes: 20 * 1024 * 1024   // 訪客上傳單檔大小上限（20MB），須與 gas.txt 的 MAX_UPLOAD_BYTES 一致
+    uploadMaxBytes: 20 * 1024 * 1024,   // 訪客上傳單檔大小上限（20MB），須與 gas.txt 的 MAX_UPLOAD_BYTES 一致
+    uploadMaxDimension: 2400,           // 上傳前先縮圖，長邊最多這麼多 px；設 0 可關閉縮圖、永遠上傳原始檔
+    uploadJpegQuality: 0.85,            // 縮圖時的 JPEG 品質（0～1）
+    uploadTimeoutMs: 60000              // 單張上傳等待逾時的時間（毫秒）
   }, window.APP_CONFIG || {});
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
@@ -501,8 +534,11 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
       selectAll: '全選',
       deselectAll: '取消全選',
       cancel: '取消多選',
-      downloadSelected: '打包下載',
       download: '下載',
+      downloadAsZip: '打包下載（ZIP）',
+      downloadAsZipHint: '一個壓縮檔，適合在電腦上解壓縮',
+      downloadIndividually: '逐張下載',
+      downloadIndividuallyHint: '每張照片各自下載，手機開啟更方便',
       close: '關閉',
       prev: '上一張',
       next: '下一張',
@@ -513,7 +549,10 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
       packing: '正在下載相片… {done} / {total}',
       zipping: '正在打包… {pct}%',
       doneToast: '已打包 {n} 張相片',
+      doneToastIndivOne: '已下載 1 張相片',
+      doneToastIndiv: '已下載 {n} 張相片',
       partialFail: '有 {n} 張下載失敗，其餘已打包完成',
+      partialFailIndiv: '有 {n} 張下載失敗，其餘已下載完成',
       allFail: '下載失敗。請確認雲端空間已開啟 CORS，或稍後再試。',
       downloading: '正在下載…',
       openedInstead: '無法直接下載，已在新分頁開啟相片。',
@@ -539,6 +578,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
       uploadWrongType: '{name} 不是圖片格式，已略過',
       uploadRateLimited: '目前上傳的人有點多，請稍後再試',
       uploadNetErr: '{name} 上傳失敗（網路或伺服器錯誤）',
+      uploadTimeout: '{name} 上傳逾時，可能是網路太慢，請稍後再試',
       refreshIcon: '重新整理'
     },
     en: {
@@ -556,8 +596,11 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
       selectAll: 'Select all',
       deselectAll: 'Deselect all',
       cancel: 'Cancel',
-      downloadSelected: 'Download selected',
       download: 'Download',
+      downloadAsZip: 'Download as ZIP',
+      downloadAsZipHint: 'One compressed file, best on a computer',
+      downloadIndividually: 'Download individually',
+      downloadIndividuallyHint: 'Each photo on its own, easier on phones',
       close: 'Close',
       prev: 'Previous',
       next: 'Next',
@@ -569,7 +612,10 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
       zipping: 'Zipping… {pct}%',
       doneToast: '{n} photos zipped',
       doneToastOne: '1 photo zipped',
+      doneToastIndiv: '{n} photos downloaded',
+      doneToastIndivOne: '1 photo downloaded',
       partialFail: '{n} failed to download; the rest were zipped',
+      partialFailIndiv: '{n} failed to download; the rest downloaded fine',
       allFail: 'Download failed. Make sure the cloud storage allows CORS, or try again later.',
       downloading: 'Downloading…',
       openedInstead: 'Direct download isn\u2019t available, so the photo opened in a new tab.',
@@ -595,6 +641,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
       uploadWrongType: '{name} isn\u2019t an image and was skipped',
       uploadRateLimited: 'Lots of uploads right now \u2014 please try again shortly',
       uploadNetErr: '{name} failed to upload (network or server error)',
+      uploadTimeout: '{name} timed out \u2014 the connection may be slow, please try again',
       refreshIcon: 'Refresh'
     }
   };
@@ -734,7 +781,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   }
   const signature = (imgs) => imgs.map((i) => (i.id || i.full) + '\u0001' + i.name).join('\u0002');
 
-  /* ---- 清單：先用本機快取領域顯示，同時在背景向 Google 取最新版 ---- */
+  /* ---- 清單：先用本機快取立即顯示，同時在背景向 Google 取最新版 ---- */
   const canRebuildNow = () => !(state.selectMode || lbOpen || busy);
   const galleryVisible = () => document.body.dataset.route === 'gallery';
 
@@ -945,6 +992,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     document.body.classList.remove('selecting');
     $('#selbar').classList.remove('show');
     $('#selbar').setAttribute('aria-hidden', 'true');
+    closeDlMenu();
     refreshSelectionUI();
     flushPending();
   }
@@ -986,7 +1034,19 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   $('#g-back').addEventListener('click', () => { if (state.selectMode) exitSelectMode(); else go('home'); });
   $('#g-selall').addEventListener('click', selectAllToggle);
   $('#sel-cancel').addEventListener('click', exitSelectMode);
-  $('#sel-download').addEventListener('click', downloadSelected);
+
+  /* 下載方式選單：打包下載（ZIP）／逐張下載 */
+  const dlSwitch = $('#dl-switch'), dlMenu = $('#dl-menu');
+  function closeDlMenu() { dlSwitch.classList.remove('open'); $('#sel-download').setAttribute('aria-expanded', 'false'); dlMenu.hidden = true; }
+  function openDlMenu() { dlSwitch.classList.add('open'); $('#sel-download').setAttribute('aria-expanded', 'true'); dlMenu.hidden = false; }
+  $('#sel-download').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (state.selected.size === 0) return;
+    if (dlMenu.hidden) openDlMenu(); else closeDlMenu();
+  });
+  $('#dl-zip').addEventListener('click', () => { closeDlMenu(); downloadSelectedZip(); });
+  $('#dl-individual').addEventListener('click', () => { closeDlMenu(); downloadSelectedIndividually(); });
+  document.addEventListener('click', (e) => { if (!dlSwitch.contains(e.target)) closeDlMenu(); });
 
   /* ================= 下載 ================= */
   const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif', 'image/avif': '.avif', 'image/svg+xml': '.svg', 'image/heic': '.heic' };
@@ -1016,7 +1076,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     const u = URL.createObjectURL(blob);
     a.href = u; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(u), 10000);
+    setTimeout(() => URL.revokeObjectURL(u), 4000);
   }
   const stamp = () => {
     const d = new Date(), p = (n) => String(n).padStart(2, '0');
@@ -1024,7 +1084,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   };
 
   let busy = false;
-  async function downloadSelected() {
+  async function downloadSelectedZip() {
     if (busy) return;
     const idxs = Array.from(state.selected).sort((a, b) => a - b);
     if (!idxs.length) return;
@@ -1054,7 +1114,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     };
 
     try {
-      await Promise.all(Array.from({ length: Math.min(3, total) }, worker));
+      await Promise.all(Array.from({ length: Math.min(4, total) }, worker));
       if (failed === total) { toast(t('allFail'), 4500); return; }
 
       const out = await zip.generateAsync(
@@ -1068,6 +1128,48 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
       else { toast(tn('doneToast', ok)); exitSelectMode(); }
     } catch (err) {
       console.error('[gallery] zip failed:', err);
+      toast(t('allFail'), 4500);
+    } finally {
+      hideBusy();
+      busy = false;
+      flushPending();
+    }
+  }
+
+  /* 逐張下載：手機上有些人不方便解壓縮，改成一張張各自觸發瀏覽器下載。
+     瀏覽器對短時間內連續觸發多個下載通常會有自己的限制或提示（例如 Chrome 會跳出「允許多次下載」的詢問），
+     這是瀏覽器本身的保護機制，不是程式的錯誤；每張之間加一點間隔可以降低被瀏覽器擋下的機率。 */
+  async function downloadSelectedIndividually() {
+    if (busy) return;
+    const idxs = Array.from(state.selected).sort((a, b) => a - b);
+    if (!idxs.length) return;
+
+    busy = true;
+    const total = idxs.length;
+    let done = 0, failed = 0;
+    showBusy(t('packing', { done: 0, total }), 0);
+
+    const used = new Set();
+    try {
+      for (const i of idxs) {
+        const item = state.images[i];
+        try {
+          const blob = await fetchBlob(urlDownload(item));
+          saveBlob(blob, uniqueName(fileNameFor(item, blob), used));
+        } catch (err) {
+          failed += 1;
+          console.warn('[gallery] fetch failed:', item.full, err);
+        }
+        done += 1;
+        showBusy(t('packing', { done, total }), (done / total) * 100);
+        if (done < total) await new Promise((r) => setTimeout(r, 350));   // 給瀏覽器一點喘息空間，降低被擋下的機率
+      }
+      if (failed === total) { toast(t('allFail'), 4500); return; }
+      const ok = total - failed;
+      if (failed) toast(t('partialFailIndiv', { n: failed }), 4500);
+      else { toast(tn('doneToastIndiv', ok)); exitSelectMode(); }
+    } catch (err) {
+      console.error('[gallery] individual download failed:', err);
       toast(t('allFail'), 4500);
     } finally {
       hideBusy();
@@ -1123,7 +1225,6 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     };
     pre.onerror = () => {
       if (token !== lbToken) return;
-      lbImg.classList.remove('dim');
       $('#lb-spinner').hidden = true;
       toast(t('imgFail'));
     };
@@ -1299,7 +1400,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   $('#u-refresh').addEventListener('click', () => {
     const icon = $('#u-refresh .ic');
     icon.style.animation = 'spin .6s linear';
-    refreshUploads().then((changed) => { toast(t('refreshed')); }).catch(() => toast(t('refreshFailed')));
+    refreshUploads().then((changed) => { toast(t(changed ? 'refreshed' : 'refreshed')); }).catch(() => toast(t('refreshFailed')));
     setTimeout(() => { icon.style.animation = ''; }, 650);
   });
 
@@ -1353,37 +1454,85 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
 
   /* ---- 新增照片：選檔、驗證、上傳 ---- */
   const UPLOAD_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
-  function fileToBase64(file) {
+  function fileToBase64(blob) {
     return new Promise((resolve, reject) => {
       const r = new FileReader();
       r.onload = () => resolve(String(r.result).split(',').pop());
       r.onerror = () => reject(r.error);
-      r.readAsDataURL(file);
+      r.readAsDataURL(blob);
     });
   }
+  /* 上傳前先在手機上把照片縮小、重新壓縮：手機相機拍出來的原始照片常常有好幾 MB，
+     轉成 Base64 文字後體積還會再膨脹約三分之一，在行動網路下很容易上傳到一半逾時或中斷
+     ——這通常才是「上傳失敗」的真正原因，不是 Google 刻意擋下特定大小。
+     任何一步失敗（例如瀏覽器無法解碼這個格式）就直接放棄縮圖，改用原始檔案，不讓上傳整個失敗。 */
+  function resizeForUpload(file) {
+    return new Promise((resolve) => {
+      const maxDim = CFG.uploadMaxDimension;
+      if (!maxDim) { resolve(file); return; }   // maxDim 設為 0 可以整個關閉縮圖，永遠上傳原始檔
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      const done = (blob) => { URL.revokeObjectURL(url); resolve(blob || file); };
+      img.onload = () => {
+        const w = img.naturalWidth, h = img.naturalHeight;
+        if (!w || !h || Math.max(w, h) <= maxDim) { done(file); return; }   // 已經夠小，不需要重新壓縮
+        const scale = maxDim / Math.max(w, h);
+        const cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = cw; canvas.height = ch;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, cw, ch);
+          canvas.toBlob((blob) => done(blob), 'image/jpeg', CFG.uploadJpegQuality);
+        } catch (_) { done(file); }
+      };
+      img.onerror = () => done(file);   // 瀏覽器解不出這個格式（部分瀏覽器不支援 HEIC 等），直接用原始檔
+      img.src = url;
+    });
+  }
+  function resizedName(originalName, resizedBlob, originalType) {
+    if (resizedBlob.type === originalType || resizedBlob.type !== 'image/jpeg') return originalName;
+    const dot = originalName.lastIndexOf('.');
+    return (dot > 0 ? originalName.slice(0, dot) : originalName) + '.jpg';   // 重新編碼成 JPEG 時，副檔名要跟著換
+  }
+  const UPLOAD_ERROR_REASON = {
+    too_big: 'big', bad_type: 'type', rate_limited: 'rate',
+    bad_action: 'net', no_data: 'net', bad_data: 'net', server_error: 'net'
+  };
   async function uploadOne(file) {
-    if (file.size > CFG.uploadMaxBytes) return { ok: false, reason: 'big' };
     if (UPLOAD_TYPES.indexOf(file.type) === -1) return { ok: false, reason: 'type' };
+
+    const resized = await resizeForUpload(file);
+    const uploadName = resizedName(file.name, resized, file.type);
+    const uploadType = resized.type || file.type;
+    if (resized.size > CFG.uploadMaxBytes) return { ok: false, reason: 'big' };   // 縮圖後仍然太大，才真的拒絕
+
     let data;
-    try { data = await fileToBase64(file); } catch (_) { return { ok: false, reason: 'net' }; }
+    try { data = await fileToBase64(resized); } catch (_) { return { ok: false, reason: 'net' }; }
+
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), CFG.uploadTimeoutMs);
     try {
       const res = await fetch(CFG.imagesSource, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // 刻意用 text/plain 避免瀏覽器送出 CORS 預檢（Apps Script 無法正確回應預檢）
-        body: JSON.stringify({ action: 'upload', filename: file.name, mimeType: file.type, data })
+        body: JSON.stringify({ action: 'upload', filename: uploadName, mimeType: uploadType, data }),
+        signal: ctl.signal
       });
       const json = await res.json().catch(() => null);
-      if (!res.ok || !json || json.error === 'rate_limited') return { ok: false, reason: json && json.error === 'rate_limited' ? 'rate' : 'net' };
-      if (!json.ok) return { ok: false, reason: 'net' };
-      return { ok: true, item: normalize({ id: json.id, name: json.name || file.name }) };
-    } catch (_) {
-      return { ok: false, reason: 'net' };
+      if (!res.ok || !json) return { ok: false, reason: 'net' };
+      if (!json.ok) return { ok: false, reason: UPLOAD_ERROR_REASON[json.error] || 'net' };
+      return { ok: true, item: normalize({ id: json.id, name: json.name || uploadName }) };
+    } catch (err) {
+      return { ok: false, reason: err && err.name === 'AbortError' ? 'timeout' : 'net' };
+    } finally {
+      clearTimeout(timer);
     }
   }
   async function handleFiles(fileList) {
     const files = Array.from(fileList || []);
     if (!files.length) return;
-    let done = 0, okCount = 0, bigCount = 0, typeCount = 0, netCount = 0, rateHit = false;
+    let done = 0, okCount = 0, failCount = 0, rateHit = false;
     const total = files.length;
     showBusy(t('uploading', { done: 0, total }), 4);
     for (const file of files) {
@@ -1396,12 +1545,15 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
         uploadState.images.unshift(r.item);                 // 樂觀更新：立刻出現在畫面最上方
         uploadState.sig = signature(uploadState.images);
         if (document.body.dataset.route === 'upload') { uRebuildGrid(); renderUploadHeader(); }
-      } else if (r.reason === 'big') { bigCount += 1; toast(t('uploadTooBig', { name: file.name }), 3000); }
-      else if (r.reason === 'type') { typeCount += 1; toast(t('uploadWrongType', { name: file.name }), 3000); }
+      } else if (r.reason === 'big') { failCount += 1; toast(t('uploadTooBig', { name: file.name }), 3000); }
+      else if (r.reason === 'type') { failCount += 1; toast(t('uploadWrongType', { name: file.name }), 3000); }
       else if (r.reason === 'rate') { rateHit = true; toast(t('uploadRateLimited'), 3500); }
-      else { netCount += 1; toast(t('uploadNetErr', { name: file.name }), 3000); }
+      else if (r.reason === 'timeout') { failCount += 1; toast(t('uploadTimeout', { name: file.name }), 3500); }
+      else { failCount += 1; toast(t('uploadNetErr', { name: file.name }), 3000); }
     }
     hideBusy();
+    // 每個失敗的檔案在迴圈裡已經各自顯示過原因（太大/格式不符/逾時/網路錯誤），
+    // 這裡只在最後補一個成功摘要，避免兩個 toast 互相蓋掉、看不清楚發生了什麼事。
     if (okCount) toast(tn('uploadOk', okCount));
     if (okCount) { store.set(UP_KEY, JSON.stringify({ t: Date.now(), raw: { v: 2, images: uploadState.images.map((it) => ({ id: it.id, name: it.name })) } })); }
   }
@@ -1448,10 +1600,9 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   /* ================= 啟動 ================= */
   $('#install-hint').hidden = isStandalone();
   loadCached();          // 有上次的清單就立刻可用
-  loadCachedUploads();
   applyLang();
   render();
-  refreshData();         // 一開啟網頁就在背景向 Google 取最新清單與背景圖
+  refreshData();         // 一開啟網頁就在背景向 Google 取最新清單與背景圖，選完語言時通常已備妥
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && Date.now() - data.fetchedAt > 120000) refreshData();
   });
