@@ -1278,7 +1278,13 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   const uGrid = $('#u-grid'), uSentinel = $('#u-sentinel');
   let uRendered = 0, uIo = null, uImgIO = null, uCurThumbPx = 400;
 
-  const uploadsUrl = () => CFG.imagesSource + (CFG.imagesSource.indexOf('?') === -1 ? '?' : '&') + 'action=uploads';
+  // 每次讀取訪客照片都帶一次性 query，避免瀏覽器 / Service Worker / 中間快取
+  // 把剛上傳的新照片暫時藏住。Apps Script 自己仍會使用 20 秒的伺服器快取，
+  // 但 doPost() 成功後會主動清掉該快取。
+  const uploadsUrl = () => {
+    const base = CFG.imagesSource + (CFG.imagesSource.indexOf('?') === -1 ? '?' : '&') + 'action=uploads';
+    return base + '&_ts=' + Date.now();
+  };
 
   function showUploadState(name) {
     ['loading', 'error', 'empty'].forEach((n) => { $('#u-' + n).hidden = n !== name; });
@@ -1499,34 +1505,74 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
     too_big: 'big', bad_type: 'type', rate_limited: 'rate',
     bad_action: 'net', no_data: 'net', bad_data: 'net', server_error: 'net'
   };
+  function waitForUploadedFile_(expectedName, timeoutMs) {
+    // GitHub Pages 與 Apps Script 是不同來源，瀏覽器可能會把 Apps Script POST
+    // 的成功回應視為 CORS 錯誤。這時不能拿 POST response 判斷成敗，所以改成：
+    // 1) POST 使用 no-cors，讓瀏覽器把請求送出去；
+    // 2) 再用原本可讀取的 GET ?action=uploads 檢查照片是否真的已進入 Drive。
+    const started = Date.now();
+    const poll = () => {
+      if (Date.now() - started > timeoutMs) return Promise.resolve(null);
+      return refreshUploads()
+        .then(() => {
+          // GAS 端會在原始檔名之前加上「UTC 時間 + 隨機碼 + _」，
+          // 所以這裡用結尾比對，而不是要求整個檔名完全相同。
+          const suffix = '_' + expectedName;
+          const hit = uploadState.images.find((it) => it.name === expectedName || it.name.endsWith(suffix));
+          if (hit) return hit;
+          return new Promise((resolve) => setTimeout(() => resolve(poll()), 1000));
+        })
+        .catch(() => new Promise((resolve) => setTimeout(() => resolve(poll()), 1200)));
+    };
+    return poll();
+  }
+
   async function uploadOne(file) {
     if (UPLOAD_TYPES.indexOf(file.type) === -1) return { ok: false, reason: 'type' };
 
     const resized = await resizeForUpload(file);
-    const uploadName = resizedName(file.name, resized, file.type);
+    const originalUploadName = resizedName(file.name, resized, file.type);
     const uploadType = resized.type || file.type;
     if (resized.size > CFG.uploadMaxBytes) return { ok: false, reason: 'big' };   // 縮圖後仍然太大，才真的拒絕
 
     let data;
     try { data = await fileToBase64(resized); } catch (_) { return { ok: false, reason: 'net' }; }
 
+    // 產生一個只用來「確認上傳是否完成」的唯一檔名。
+    // Apps Script 會再加上 UTC 時間與隨機字串，因此只要輪詢清單時找到這個完整名稱，
+    // 就可以確認檔案已經真正建立在 Drive。檔名本身仍保留原始照片名稱，僅多一段短識別碼。
+    const dot = originalUploadName.lastIndexOf('.');
+    const token = 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const uploadName = dot > 0
+      ? originalUploadName.slice(0, dot) + '__' + token + originalUploadName.slice(dot)
+      : originalUploadName + '__' + token;
+
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), CFG.uploadTimeoutMs);
     try {
-      const res = await fetch(CFG.imagesSource, {
+      await fetch(CFG.imagesSource, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // 刻意用 text/plain 避免瀏覽器送出 CORS 預檢（Apps Script 無法正確回應預檢）
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action: 'upload', filename: uploadName, mimeType: uploadType, data }),
         signal: ctl.signal
       });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json) return { ok: false, reason: 'net' };
-      if (!json.ok) return { ok: false, reason: UPLOAD_ERROR_REASON[json.error] || 'net' };
-      return { ok: true, item: normalize({ id: json.id, name: json.name || uploadName }) };
-    } catch (err) {
-      return { ok: false, reason: err && err.name === 'AbortError' ? 'timeout' : 'net' };
-    } finally {
+
       clearTimeout(timer);
+
+      // POST 的回應刻意不讀取；改用 GET 驗證 Drive 是否出現這張照片。
+      const item = await waitForUploadedFile_(uploadName, Math.max(8000, Math.min(CFG.uploadTimeoutMs, 30000)));
+      if (item) return { ok: true, item: normalize(item) };
+
+      // 正常情況下 Apps Script 已完成寫入，但 GET 尚未在時限內看到時，
+      // 再做一次不帶快取的清單檢查，避免最後一秒才更新造成誤判。
+      await new Promise((r) => setTimeout(r, 1000));
+      const finalSuffix = '_' + uploadName;
+      const finalItem = uploadState.images.find((it) => it.name === uploadName || it.name.endsWith(finalSuffix));
+      return finalItem ? { ok: true, item: normalize(finalItem) } : { ok: false, reason: 'timeout' };
+    } catch (err) {
+      clearTimeout(timer);
+      return { ok: false, reason: err && err.name === 'AbortError' ? 'timeout' : 'net' };
     }
   }
   async function handleFiles(fileList) {
