@@ -7,7 +7,7 @@ window.APP_CONFIG = {
   // 精選相簿（GET）與訪客上傳（GET 列表 + POST 上傳）都是同一個網址，
   // 差別只在網頁內部呼叫時加的 ?action=uploads 參數，這裡不必分開填。
   // 改回本機測試資料時，換成 "images.json"（此時「上傳照片」頁面無法運作，只能離線瀏覽相片集）。
-  imagesSource: "https://script.google.com/macros/s/AKfycbxJNyvkGrNgWAB8g1zKlVMNzVWt2qaivVC0LgybeYCUPVxEmTIgvkuhCOBOmMNCptpP1A/exec",
+  imagesSource: "https://script.google.com/macros/s/AKfycbw2BP7lxATzhWaJNu_-p1rNn9mp6qIVyoPKsAi5MN3-jhgUQhGGyL2r20THrE8FiaE/exec",
   // imagesSource: "images.json",
 
   longPressMs: 500,        // 長按幾毫秒進入多選模式
