@@ -501,7 +501,7 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <!-- 站台設定（圖片來源等） -->
-<script src="config.js"></script>
+<script src="config.js?v=20260924-2"></script>
 
 <script>
 (function () {
@@ -1613,7 +1613,15 @@ body[data-route="upload"] .toast{bottom:calc(92px + var(--safe-b))}
   });
 
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js?v=20260924-2', {updateViaCache: 'none'}).then((reg) => { try { reg.update(); } catch (_) {} }).catch(() => {}); });
+  }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!sessionStorage.getItem('sw-reloaded-20260924-2')) {
+        sessionStorage.setItem('sw-reloaded-20260924-2', '1');
+        location.reload();
+      }
+    });
   }
 })();
 </script>
