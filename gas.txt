@@ -1,5 +1,5 @@
 /**
- * Photo Gallery — Google Apps Script（V1.3，僅供紀錄；請貼到 script.google.com 專案）
+ * Photo Gallery — Google Apps Script（V1.5，僅供紀錄；請貼到 script.google.com 專案）
  *
  * 部署：部署 → 新增部署作業 → 類型「網頁應用程式」
  *       執行身分：我　　誰可以存取：任何人
@@ -20,6 +20,15 @@
  *   3. 把兩個資料夾的 ID 分別填入下面的 GALLERY_FOLDER_ID、UPLOAD_FOLDER_ID
  *      （資料夾網址 `/folders/` 後面那一串）。
  *   4. 部署（或重新部署）這支程式，網址跟 config.js 都不用改。
+ *
+ * ⚠️ 重要（V1.5 加註，實際發生過的問題）：這支程式是用「部署這支 Apps Script 的帳號」的身分
+ *    寫入檔案。就算寫入的是「別人分享出來的資料夾」，新增檔案占用的雲端硬碟容量，算的還是
+ *    「部署帳號」自己的額度（15GB 免費額度，Gmail／相簿／雲端硬碟共用），不是資料夾擁有者的額度
+ *    ——這是 Google 的規則，不是這支程式的問題。如果這個帳號自己的空間满了，不管上傳的照片多小，
+ *    每一次上傳都會失敗，執行記錄會看到「Exception: Limit Exceeded: Drive.」。
+ *    最簡單的做法：**用一個空間充足、專門用來部署這支程式的 Google 帳號**（不要跟塞滿東西的
+ *    私人帳號共用），資料夾也一起用這個帳號建立最單純，可以完全避開這個問題。
+ *    上傳一直失敗、看不出原因時，可以執行下面的 diagnoseUpload() 函式直接測試。
  *
  * 這支程式對訪客上傳資料夾「只開放寫入」：
  *   - 只有 doPost 能新增檔案，且一定是新建立的檔案（DriveApp.createFile），不會覆蓋、
@@ -76,8 +85,24 @@ function doPost(e) {
     var stamped = Utilities.formatDate(new Date(), "UTC", "yyyyMMdd-HHmmss") + "-" + Math.random().toString(36).slice(2, 7) + "_" + safeName;
 
     var blob = Utilities.newBlob(bytes, mimeType, stamped);
-    var folder = DriveApp.getFolderById(UPLOAD_FOLDER_ID);
-    var file = folder.createFile(blob);   // 只會新建檔案；這支程式沒有任何刪除/覆蓋既有檔案的程式碼路徑
+    var folder;
+    var file;
+    try {
+      folder = DriveApp.getFolderById(UPLOAD_FOLDER_ID);
+      file = folder.createFile(blob);   // 只會新建檔案；這支程式沒有任何刪除/覆蓋既有檔案的程式碼路徑
+    } catch (err) {
+      console.error(err);
+      // 「Limit Exceeded: Drive」代表「執行這支程式的 Google 帳號」自己的雲端硬碟容量已經滿了。
+      // 這一點常讓人誤會：即使寫入的是別人分享出來的資料夾，新增檔案時占用的儲存空間，
+      // 算的是「執行帳號」自己的額度，不是資料夾擁有者的額度（Google 官方文件寫得很清楚）。
+      // 解法：清空執行帳號的雲端硬碟／Gmail／相簿的垃圾桶騰出空間，或購買 Google One 加購容量，
+      // 或乾脆讓「擁有資料夾的帳號」自己來部署這支程式（就不會有跨帳號占用額度的問題）。
+      var msg = String((err && err.message) || err || "");
+      if (msg.indexOf("Limit Exceeded") !== -1 || msg.indexOf("storage") !== -1 || msg.indexOf("quota") !== -1) {
+        return out_(JSON.stringify({ ok: false, error: "drive_quota" }));
+      }
+      return out_(JSON.stringify({ ok: false, error: "server_error" }));
+    }
     if (AUTO_SHARE_FILES) share_(file);
 
     try { CacheService.getScriptCache().remove(UPLOADS_CACHE_KEY); } catch (err) {}  // 讓下一次「下拉更新」立刻看到這張
@@ -159,4 +184,48 @@ function clearUploadsCache() { CacheService.getScriptCache().remove(UPLOADS_CACH
 function testRun() {
   Logger.log(doGet({ parameter: {} }).getContent());
   Logger.log(doGet({ parameter: { action: "uploads" } }).getContent());
+}
+
+/**
+ * 手動工具：上傳一直失敗、看不出原因時，在編輯器選這個函式 → 執行，
+ * 「執行記錄」會直接告訴你能不能寫入訪客上傳資料夾，以及失敗的真正原因。
+ * 這是實際做一次「新增檔案」的動作來測試，不是只看數字，結果最準——
+ * 成功的話，會自動把測試檔案刪掉，不會留下垃圾。
+ */
+function diagnoseUpload() {
+  Logger.log("=== 訪客上傳資料夾診斷 ===");
+  try {
+    Logger.log("目前登入、實際執行這支程式的帳號：" + Session.getActiveUser().getEmail());
+  } catch (e) {
+    Logger.log("（無法取得目前帳號的 email，這不影響下面的測試）");
+  }
+
+  var folder;
+  try {
+    folder = DriveApp.getFolderById(UPLOAD_FOLDER_ID);
+    Logger.log("資料夾讀取成功，名稱：" + folder.getName());
+  } catch (err) {
+    Logger.log("❌ 讀取資料夾就失敗了，請確認 UPLOAD_FOLDER_ID 這個 ID 有沒有填對：" + err);
+    return;
+  }
+
+  try {
+    var testBlob = Utilities.newBlob("diagnose", "text/plain", "_diagnose_test.txt");
+    var testFile = folder.createFile(testBlob);
+    Logger.log("✅ 寫入測試成功！訪客上傳應該可以正常運作。");
+    testFile.setTrashed(true);   // 立刻清掉測試檔案，不留垃圾
+    Logger.log("（測試檔案已自動刪除）");
+  } catch (err) {
+    var msg = String(err);
+    Logger.log("❌ 寫入測試失敗：" + err);
+    if (msg.indexOf("Limit Exceeded") !== -1) {
+      Logger.log("");
+      Logger.log("→ 這個錯誤幾乎可以確定是「執行這支程式的帳號」自己的 Google 雲端硬碟空間滿了。");
+      Logger.log("→ 即使寫入的是別人分享出來的資料夾，新增檔案占用的容量算的也是「執行帳號」自己的額度，");
+      Logger.log("  不是資料夾擁有者的額度，這是 Google 的規則，不是這支程式的問題。");
+      Logger.log("→ 請用上面印出來的帳號登入 https://drive.google.com/settings/storage 確認容量是否已滿。");
+      Logger.log("→ 解法二選一：(1) 清空該帳號的雲端硬碟／Gmail／相簿垃圾桶，或購買 Google One 加購容量；");
+      Logger.log("             (2) 改用「資料夾擁有者」那個帳號本身來部署這支 Apps Script，一勞永逸避開這個問題。");
+    }
+  }
 }

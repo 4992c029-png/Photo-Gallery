@@ -1,5 +1,5 @@
 /* Service Worker：讓網頁可安裝成 PWA，並在離線時仍能開啟介面 */
-const CACHE = 'gallery-shell-v5';
+const CACHE = 'gallery-shell-v7';
 const SHELL = [
   './',
   'index.html',
@@ -15,7 +15,7 @@ const SHELL = [
   'assets/leaf-br.png',
   'assets/sprig.png'
 ];
-const CDN_HOSTS = ['cdnjs.cloudflare.com'];
+const CDN_HOSTS = ['cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
